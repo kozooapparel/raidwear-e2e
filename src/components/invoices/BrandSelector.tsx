@@ -105,7 +105,7 @@ export default function BrandSelector({ selectedBrandId, onSelect, required = fa
                                             {brand.name}
                                         </h4>
                                         {brand.is_default && (
-                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-brand-100 text-brand-700">
                                                 Default
                                             </span>
                                         )}

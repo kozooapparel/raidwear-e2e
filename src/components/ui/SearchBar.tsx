@@ -33,12 +33,15 @@ export default function SearchBar({ onSearch, placeholder = 'Cari customer atau 
                 value={query}
                 onChange={handleChange}
                 placeholder={placeholder}
-                className="w-full pl-10 pr-10 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 placeholder-subtle focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all shadow-sm"
+                aria-label={placeholder}
+                className="w-full pl-10 pr-10 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 placeholder-subtle focus:outline-none focus:ring-2 focus:ring-brand-500/15 focus:border-brand-500 transition-all shadow-sm"
             />
             {query && (
                 <button
+                    type="button"
                     onClick={handleClear}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                    aria-label="Bersihkan pencarian"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
                 >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

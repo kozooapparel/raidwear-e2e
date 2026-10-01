@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { OrderWithCustomer, ProductionSpecs } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
+import { PageHeader } from '@/components/ui/ds'
 import FormOrderEditor from './FormOrderEditor'
 import FormOrderDownloadButton from './FormOrderDownloadButton'
 import FormOrderPreviewButton from './FormOrderPreviewButton'
@@ -54,28 +55,26 @@ export default function FormOrderEditClient({ order }: FormOrderEditClientProps)
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                    <Link
-                        href="/form-order"
-                        className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
-                        title="Kembali"
-                        aria-label="Kembali ke daftar form order"
-                    >
-                        <ArrowLeft className="w-5 h-5" />
-                    </Link>
-                    <div>
-                        <h1 className="text-xl font-bold text-slate-900">Detail / Edit Form Order</h1>
-                        <p className="text-sm text-slate-500">
-                            {order.spk_number || 'Draft'} · {order.customer?.name || '-'}
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <FormOrderPreviewButton order={order} />
-                    <FormOrderDownloadButton order={order} variant="icon" />
-                </div>
+        <div className="space-y-6">
+            <div className="space-y-4">
+                <Link
+                    href="/form-order"
+                    className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 transition-colors"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Kembali ke Form Order
+                </Link>
+
+                <PageHeader
+                    title="Detail / Edit Form Order"
+                    description={`${order.spk_number || 'Draft'} · ${order.customer?.name || '-'}`}
+                    actions={
+                        <>
+                            <FormOrderPreviewButton order={order} />
+                            <FormOrderDownloadButton order={order} variant="icon" />
+                        </>
+                    }
+                />
             </div>
 
             <FormOrderEditor order={order} onSave={handleSave} isLoading={loading} />

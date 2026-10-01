@@ -12,7 +12,7 @@ interface ModalFooterProps {
 }
 
 const variantClasses = {
-    primary: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+    primary: 'bg-brand-600 hover:bg-brand-700 text-white',
     danger: 'bg-red-500 hover:bg-red-600 text-white',
     warning: 'bg-amber-500 hover:bg-amber-600 text-white',
 }

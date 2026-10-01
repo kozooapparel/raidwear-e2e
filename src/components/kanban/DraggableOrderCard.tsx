@@ -108,7 +108,7 @@ export default function DraggableOrderCard({ order, isBottleneck, onClick }: Dra
             style={style}
             {...attributes}
             {...listeners}
-            onClick={(e) => {
+            onClick={() => {
                 if (!isDragging) {
                     onClick()
                 }
@@ -117,30 +117,32 @@ export default function DraggableOrderCard({ order, isBottleneck, onClick }: Dra
         >
             {/* Outer Container - Pastel Background */}
             <div className={`pt-2 px-1.5 pb-1.5 rounded-2xl transition-all ${stageReadiness.isReady
-                ? 'bg-emerald-100 dark:bg-emerald-900/50'
-                : 'bg-red-100 dark:bg-red-900/50'
+                ? 'bg-emerald-100'
+                : 'bg-red-100'
                 } ${isDragging ? 'ring-2 ring-offset-2 ring-emerald-500' : ''} ${isBottleneck ? 'ring-2 ring-red-400 animate-pulse' : ''
                 }`}>
 
-                {/* Header Status - In outer container padding area */}
-                <div className={`flex items-center gap-1.5 px-2 mb-1.5 text-[11px] font-extrabold uppercase tracking-wider ${stageReadiness.isReady
-                    ? 'text-emerald-700 dark:text-emerald-300'
-                    : 'text-red-700 dark:text-red-300'
+                {/* Header Status - Sejajar dengan tepi thumbnail di dalam kartu */}
+                <div className={`flex items-center gap-1.5 px-2.5 mb-2 leading-none ${stageReadiness.isReady
+                    ? 'text-emerald-700'
+                    : 'text-red-700'
                     }`}>
-                    <span className={`w-2 h-2 rounded-full ${stageReadiness.isReady ? 'bg-emerald-500 ring-2 ring-emerald-300' : 'bg-red-500 ring-2 ring-red-300'
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${stageReadiness.isReady ? 'bg-emerald-500' : 'bg-red-500'
                         }`}></span>
-                    {stageReadiness.isReady ? 'SIAP PINDAH' : 'PERLU ACTION'}
+                    <span className="text-[10px] font-bold uppercase tracking-wide">
+                        {stageReadiness.isReady ? 'SIAP PINDAH' : 'PERLU ACTION'}
+                    </span>
 
                     {/* Bottleneck Days Badge */}
                     {isBottleneck && (
-                        <span className="ml-auto px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-red-500 text-white">
+                        <span className="ml-auto inline-flex items-center h-4 px-1.5 text-[9px] font-bold rounded-full bg-red-500 text-white text-mono">
                             {daysInStage}d
                         </span>
                     )}
                 </div>
 
                 {/* Inner Card - White Card */}
-                <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm overflow-hidden transition-all hover:shadow-md">
+                <div className="bg-white rounded-xl shadow-sm overflow-hidden transition-all hover:shadow-md">
 
                     {/* Card Content */}
                     <div className="p-2.5">
@@ -150,11 +152,11 @@ export default function DraggableOrderCard({ order, isBottleneck, onClick }: Dra
                         {(order.mockup_url || order.stage === 'proses_desain') && (
                             <div className="relative mb-2">
                                 {order.mockup_url ? (
-                                    <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800">
+                                    <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-100">
                                         <Image src={order.mockup_url} alt="Desain" fill sizes="(max-width: 768px) 100vw, 256px" className="object-cover pointer-events-none" />
                                     </div>
                                 ) : (
-                                    <div className="w-full aspect-video rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center border border-dashed border-slate-200">
+                                    <div className="w-full aspect-video rounded-lg bg-slate-50 flex items-center justify-center border border-dashed border-slate-200">
                                         <span className="text-[10px] text-slate-400">No Mockup</span>
                                     </div>
                                 )}
@@ -164,9 +166,9 @@ export default function DraggableOrderCard({ order, isBottleneck, onClick }: Dra
 
 
                         {/* Customer Name with Brand Logo */}
-                        <div className="flex items-center gap-1.5 mb-1">
+                        <div className="flex items-center gap-1.5 mb-1.5">
                             {order.brand?.logo_url && (
-                                <div className="w-4 h-4 relative flex-shrink-0">
+                                <div className="w-4 h-4 relative shrink-0">
                                     <Image
                                         src={order.brand.logo_url}
                                         alt={order.brand.name || 'Brand'}
@@ -175,60 +177,60 @@ export default function DraggableOrderCard({ order, isBottleneck, onClick }: Dra
                                     />
                                 </div>
                             )}
-                            <h4 className="font-semibold text-slate-900 dark:text-slate-100 text-xs truncate">
+                            <h4 className="font-semibold text-slate-900 text-xs leading-none truncate">
                                 {order.customer?.name || 'Unknown'}
                             </h4>
                         </div>
 
                         {/* Nama PO - Show from proses_layout stage onwards if SPK is filled */}
                         {order.nama_po && ['proses_layout', 'dp_produksi', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
-                            <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate mb-1">
-                                PO: <span className="text-slate-700 dark:text-slate-200 font-semibold">{order.nama_po}</span>
+                            <p className="text-[10px] text-slate-500 truncate mb-1.5">
+                                PO: <span className="text-slate-700 font-semibold">{order.nama_po}</span>
                             </p>
                         )}
 
                         {/* Order Details Row */}
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-[10px]">
-                                <span className="flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 text-slate-500 text-[10px] font-medium min-w-0">
+                                <span className="inline-flex items-center gap-1">
+                                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                                     </svg>
-                                    {order.total_quantity}pcs
+                                    <span className="text-mono">{order.total_quantity}pcs</span>
                                 </span>
                                 {order.deadline && (
-                                    <span className="flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    <span className="inline-flex items-center gap-1">
+                                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                         </svg>
-                                        {formatDate(order.deadline)}
+                                        <span className="text-mono">{formatDate(order.deadline)}</span>
                                     </span>
                                 )}
                             </div>
 
                             {/* Stage Status Badge - Bottom Right */}
-                            <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded-full text-white ${stageStatus.isReady ? 'bg-emerald-500' : 'bg-red-500'}`}>
+                            <span className={`inline-flex items-center h-4 px-1.5 text-[9px] font-semibold rounded-full text-white shrink-0 ${stageStatus.isReady ? 'bg-emerald-500' : 'bg-red-500'}`}>
                                 {stageStatus.label}
                             </span>
                         </div>
 
                         {/* Admin Badge with Order Age Timer */}
                         {order.creator?.full_name && (
-                            <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between">
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[9px] font-medium">
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 h-5 px-1.5 rounded-full bg-slate-100 text-slate-600 text-[9px] font-medium min-w-0">
+                                    <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                     </svg>
-                                    {order.creator.full_name}
+                                    <span className="truncate">{order.creator.full_name}</span>
                                 </span>
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isOverOneDay
-                                    ? 'bg-red-200 text-red-700'
-                                    : 'bg-slate-200 text-slate-600'
+                                <span className={`ml-auto inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[10px] font-medium whitespace-nowrap shrink-0 ${isOverOneDay
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-slate-100 text-slate-600'
                                     }`}>
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    {orderAge}
+                                    <span className="text-mono">{orderAge}</span>
                                 </span>
                             </div>
                         )}

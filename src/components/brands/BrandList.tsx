@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Brand } from '@/types/database'
 import { deleteBrand, setDefaultBrand } from '@/lib/actions/brands'
+import { ConfirmDialog, SearchBar } from '@/components/ui'
+import { toast } from 'sonner'
 import BrandFormModal from './BrandFormModal'
 
 interface BrandListProps {
@@ -12,17 +14,45 @@ interface BrandListProps {
     onDelete: (id: string) => void
 }
 
+const IconTrash = () => (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+)
+
+const IconPhone = () => (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 5a2 2 0 012-2h2.6a1 1 0 01.95.68l1.1 3.3a1 1 0 01-.24 1.03l-1.4 1.4a16 16 0 006.58 6.58l1.4-1.4a1 1 0 011.03-.24l3.3 1.1a1 1 0 01.68.95V19a2 2 0 01-2 2h-1C9.72 21 3 14.28 3 6V5z" />
+    </svg>
+)
+
 export default function BrandList({ brands, onBrandUpdated, onSetDefault, onDelete }: BrandListProps) {
     const [loading, setLoading] = useState<string | null>(null)
     const [editingBrand, setEditingBrand] = useState<Brand | null>(null)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [searchKey, setSearchKey] = useState(0)
+    const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null)
+    const [deleting, setDeleting] = useState(false)
+
+    const filteredBrands = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        if (!q) return brands
+        return brands.filter((brand) =>
+            brand.name.toLowerCase().includes(q) ||
+            brand.code.toLowerCase().includes(q) ||
+            (brand.company_name ?? '').toLowerCase().includes(q)
+        )
+    }, [brands, searchQuery])
 
     const handleSetDefault = async (id: string) => {
         setLoading(id)
         try {
             await setDefaultBrand(id)
             onSetDefault(id)
+            toast.success('Brand default berhasil diubah')
         } catch (error) {
             console.error('Error setting default brand:', error)
+            toast.error('Gagal mengubah brand default')
         } finally {
             setLoading(null)
         }
@@ -33,148 +63,194 @@ export default function BrandList({ brands, onBrandUpdated, onSetDefault, onDele
         setEditingBrand(null)
     }
 
-    const handleDelete = async (id: string, name: string) => {
-        if (!confirm(`Yakin ingin menghapus brand "${name}"?`)) return
-
-        setLoading(id)
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        setDeleting(true)
         try {
-            await deleteBrand(id)
-            onDelete(id)
+            await deleteBrand(deleteTarget.id)
+            onDelete(deleteTarget.id)
+            toast.success(`Brand "${deleteTarget.name}" berhasil dihapus`)
+            setDeleteTarget(null)
         } catch (error) {
             console.error('Error deleting brand:', error)
-            alert(error instanceof Error ? error.message : 'Error menghapus brand')
+            toast.error(error instanceof Error ? error.message : 'Gagal menghapus brand')
         } finally {
-            setLoading(null)
+            setDeleting(false)
         }
+    }
+
+    const resetSearch = () => {
+        setSearchQuery('')
+        setSearchKey((key) => key + 1)
     }
 
     if (brands.length === 0) {
         return (
-            <div className="text-center py-12 text-slate-500">
-                Belum ada brand. Klik tombol "Tambah Brand" untuk menambahkan.
+            <div className="surface flex flex-col items-center justify-center px-6 py-16 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                </div>
+                <p className="text-sm font-medium text-slate-700">Belum ada brand</p>
+                <p className="mt-1 text-sm text-slate-500">Klik tombol &ldquo;Tambah Brand&rdquo; untuk menambahkan.</p>
             </div>
         )
     }
 
     return (
         <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {brands.map((brand) => (
-                    <div
-                        key={brand.id}
-                        className={`bg-white rounded-2xl border-2 p-6 transition-all hover:shadow-lg ${brand.is_default ? 'border-emerald-500 ring-2 ring-emerald-100' : 'border-slate-200'
-                            }`}
-                    >
-                        {/* Header with Logo */}
-                        <div className="flex items-start gap-4 mb-4">
-                            {brand.logo_url ? (
-                                <img
-                                    src={brand.logo_url}
-                                    alt={brand.name}
-                                    className="w-16 h-16 object-contain rounded-lg bg-slate-50 p-1"
-                                />
-                            ) : (
-                                <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center">
-                                    <span className="text-2xl font-bold text-slate-400">
-                                        {brand.code}
-                                    </span>
-                                </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <h3 className="font-bold text-lg text-slate-900 truncate">
-                                        {brand.name}
-                                    </h3>
-                                    {brand.is_default && (
-                                        <span className="px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">
-                                            Default
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-sm text-slate-500">Code: {brand.code}</p>
-                            </div>
-                        </div>
-
-                        {/* Prefixes */}
-                        <div className="flex gap-2 mb-4 flex-wrap">
-                            <span className="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded-lg">
-                                INV: {brand.invoice_prefix}
-                            </span>
-                            <span className="px-2 py-1 text-xs bg-purple-50 text-purple-700 rounded-lg">
-                                KWT: {brand.kuitansi_prefix}
-                            </span>
-                            <span className="px-2 py-1 text-xs bg-orange-50 text-orange-700 rounded-lg">
-                                SPK: {brand.spk_prefix}
-                            </span>
-                        </div>
-
-                        {/* Company Info */}
-                        <div className="text-sm text-slate-600 mb-4 space-y-1">
-                            <p className="font-medium">{brand.company_name}</p>
-                            {brand.address && (
-                                <p className="text-slate-400 text-xs line-clamp-2">{brand.address}</p>
-                            )}
-                            {brand.phone && (
-                                <p className="text-slate-400 text-xs">📞 {brand.phone}</p>
-                            )}
-                        </div>
-
-                        {/* Bank Info */}
-                        {brand.bank_name && (
-                            <div className="p-3 bg-slate-50 rounded-xl mb-4">
-                                <p className="text-xs text-slate-500 mb-1">Bank Info</p>
-                                <p className="text-sm font-medium">{brand.bank_name}</p>
-                                <p className="text-xs text-slate-600">{brand.account_name}</p>
-                                <p className="text-xs text-slate-600">{brand.account_number}</p>
-                            </div>
-                        )}
-
-                        {/* Counters */}
-                        <div className="flex gap-4 text-xs text-slate-400 mb-4 border-t pt-4">
-                            <span>Invoice: #{brand.invoice_counter}</span>
-                            <span>Kuitansi: #{brand.kuitansi_counter}</span>
-                            <span>SPK: #{brand.spk_counter}</span>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-2">
-                            {!brand.is_default && (
-                                <button
-                                    onClick={() => handleSetDefault(brand.id)}
-                                    disabled={loading === brand.id}
-                                    className="flex-1 py-2 px-3 text-sm font-medium text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors disabled:opacity-50"
-                                >
-                                    Set Default
-                                </button>
-                            )}
-                            <button
-                                onClick={() => setEditingBrand(brand)}
-                                className="flex-1 py-2 px-3 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors"
-                            >
-                                Edit
-                            </button>
-                            {!brand.is_default && (
-                                <button
-                                    onClick={() => handleDelete(brand.id, brand.name)}
-                                    disabled={loading === brand.id}
-                                    className="py-2 px-3 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-xl transition-colors disabled:opacity-50"
-                                >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            )}
-                        </div>
+            {/* Toolbar pencarian */}
+            <div className="surface mb-5 p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="sm:max-w-xs sm:flex-1">
+                        <SearchBar
+                            key={searchKey}
+                            onSearch={setSearchQuery}
+                            placeholder="Cari nama, kode, atau perusahaan..."
+                        />
                     </div>
-                ))}
+                    <p className="text-xs text-slate-500 sm:ml-auto">
+                        Menampilkan <span className="font-semibold text-slate-700">{filteredBrands.length}</span> dari {brands.length} brand
+                    </p>
+                </div>
             </div>
 
-            {/* Edit Modal */}
+            {filteredBrands.length === 0 ? (
+                <div className="surface flex flex-col items-center justify-center px-6 py-16 text-center">
+                    <p className="text-sm font-medium text-slate-700">Tidak ada brand yang cocok</p>
+                    <p className="mt-1 text-sm text-slate-500">Coba kata kunci lain atau reset pencarian.</p>
+                    <button type="button" onClick={resetSearch} className="btn btn-secondary btn-sm mt-4">
+                        Reset Pencarian
+                    </button>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+                    {filteredBrands.map((brand) => (
+                        <div
+                            key={brand.id}
+                            className={`surface surface-hover flex flex-col p-5 ${brand.is_default ? 'ring-2 ring-brand-500/40' : ''}`}
+                        >
+                            {/* Header logo + nama */}
+                            <div className="mb-4 flex items-start gap-4">
+                                {brand.logo_url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                        src={brand.logo_url}
+                                        alt={brand.name}
+                                        className="h-16 w-16 rounded-lg bg-slate-50 object-contain p-1"
+                                    />
+                                ) : (
+                                    <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-gradient-to-br from-slate-100 to-slate-200">
+                                        <span className="text-2xl font-bold text-slate-400">{brand.code}</span>
+                                    </div>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="truncate text-lg font-bold text-slate-900">{brand.name}</h3>
+                                        {brand.is_default && <span className="badge badge-brand">Default</span>}
+                                    </div>
+                                    <p className="text-sm text-slate-500">Kode: {brand.code}</p>
+                                </div>
+                            </div>
+
+                            {/* Prefix dokumen */}
+                            <div className="mb-4 flex flex-wrap gap-2">
+                                <span className="badge badge-info text-mono">INV: {brand.invoice_prefix}</span>
+                                <span className="badge badge-brand text-mono">KWT: {brand.kuitansi_prefix}</span>
+                                <span className="badge badge-neutral text-mono">SPK: {brand.spk_prefix}</span>
+                            </div>
+
+                            {/* Info perusahaan */}
+                            <div className="mb-4 space-y-1 text-sm text-slate-600">
+                                <p className="font-medium">{brand.company_name}</p>
+                                {brand.address && (
+                                    <p className="line-clamp-2 text-xs text-slate-400">{brand.address}</p>
+                                )}
+                                {brand.phone && (
+                                    <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                                        <IconPhone />
+                                        {brand.phone}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Info bank */}
+                            {brand.bank_name && (
+                                <div className="mb-4 rounded-xl bg-slate-50 p-3">
+                                    <p className="mb-1 text-xs text-slate-500">Info Bank</p>
+                                    <p className="text-sm font-medium">{brand.bank_name}</p>
+                                    <p className="text-xs text-slate-600">{brand.account_name}</p>
+                                    <p className="text-xs text-slate-600">{brand.account_number}</p>
+                                </div>
+                            )}
+
+                            {/* Counter dokumen */}
+                            <div className="mb-4 flex gap-4 border-t border-slate-100 pt-4 text-xs text-slate-400 text-mono">
+                                <span>Invoice: #{brand.invoice_counter}</span>
+                                <span>Kuitansi: #{brand.kuitansi_counter}</span>
+                                <span>SPK: #{brand.spk_counter}</span>
+                            </div>
+
+                            {/* Aksi */}
+                            <div className="mt-auto flex gap-2">
+                                {!brand.is_default && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSetDefault(brand.id)}
+                                        disabled={loading === brand.id}
+                                        className="btn btn-secondary btn-sm flex-1"
+                                    >
+                                        {loading === brand.id ? 'Memproses...' : 'Set Default'}
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingBrand(brand)}
+                                    className="btn btn-secondary btn-sm flex-1"
+                                >
+                                    Edit
+                                </button>
+                                {!brand.is_default && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setDeleteTarget(brand)}
+                                        disabled={loading === brand.id}
+                                        aria-label={`Hapus brand ${brand.name}`}
+                                        className="btn btn-ghost btn-sm px-2.5 text-red-600 hover:bg-red-50"
+                                    >
+                                        <IconTrash />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Modal edit */}
             <BrandFormModal
                 isOpen={editingBrand !== null}
                 onClose={() => setEditingBrand(null)}
                 brand={editingBrand || undefined}
                 onBrandUpdated={handleBrandUpdated}
+            />
+
+            {/* Konfirmasi hapus */}
+            <ConfirmDialog
+                isOpen={deleteTarget !== null}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleDelete}
+                title="Hapus Brand"
+                description={
+                    deleteTarget
+                        ? `Yakin ingin menghapus brand "${deleteTarget.name}"? Tindakan ini tidak bisa dibatalkan.`
+                        : ''
+                }
+                confirmText="Hapus Brand"
+                loading={deleting}
+                tone="danger"
+                icon={<IconTrash />}
             />
         </>
     )

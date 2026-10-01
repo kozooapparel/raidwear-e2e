@@ -4,7 +4,11 @@ import { useState } from 'react'
 import { addBonus, updateBonus, deleteBonus } from '../actions'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { CurrencyInput, NumberInput } from '@/components/ui'
+import { CurrencyInput, NumberInput, SelectBox, ConfirmDialog } from '@/components/ui'
+
+// Kelas input seragam mengikuti design system
+const inputClass =
+    'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15'
 
 interface Bonus {
     id: string
@@ -27,8 +31,24 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
     const [loading, setLoading] = useState(false)
     const isEdit = !!bonus
 
+    const currentMonth = new Date().getMonth() + 1
+    const currentYear = new Date().getFullYear()
+
+    // Nilai pilihan SelectBox (tidak ikut FormData, dikirim via hidden input)
+    const [bonusType, setBonusType] = useState(bonus?.bonus_type || '')
+    const [periodMonth, setPeriodMonth] = useState(String(bonus?.period_month || currentMonth))
+    // Konfirmasi hapus bonus
+    const [confirmDelete, setConfirmDelete] = useState(false)
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
+
+        // Validasi manual karena nilai SelectBox dikirim lewat hidden input
+        if (!bonusType) {
+            toast.error('Pilih jenis bonus terlebih dahulu')
+            return
+        }
+
         setLoading(true)
 
         const formData = new FormData(e.currentTarget)
@@ -49,10 +69,10 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
     }
 
     const handleDelete = async () => {
-        if (!confirm('Hapus bonus ini?')) return
+        if (!bonus) return
 
         setLoading(true)
-        const result = await deleteBonus(bonus!.id, employeeId)
+        const result = await deleteBonus(bonus.id, employeeId)
 
         if (result.success) {
             toast.success('Bonus berhasil dihapus!')
@@ -63,21 +83,20 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
         }
 
         setLoading(false)
+        setConfirmDelete(false)
     }
 
-    const currentMonth = new Date().getMonth() + 1
-    const currentYear = new Date().getFullYear()
-
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-900">
+                    <h2 className="text-lg font-bold text-slate-900">
                         {isEdit ? 'Edit Bonus' : 'Tambah Bonus'}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                        className="btn-icon btn-ghost"
+                        aria-label="Tutup"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -91,18 +110,21 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                         <label className="block text-sm font-medium text-slate-700 mb-2">
                             Jenis Bonus <span className="text-red-500">*</span>
                         </label>
-                        <select
-                            name="bonus_type"
-                            required
-                            defaultValue={bonus?.bonus_type || ''}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none"
-                        >
-                            <option value="">Pilih Jenis</option>
-                            <option value="performance">Performa</option>
-                            <option value="target">Target</option>
-                            <option value="holiday">THR</option>
-                            <option value="other">Lainnya</option>
-                        </select>
+                        {/* Nilai SelectBox dikirim lewat hidden input agar tetap ikut FormData */}
+                        <SelectBox
+                            options={[
+                                { value: '', label: 'Pilih Jenis' },
+                                { value: 'performance', label: 'Performa' },
+                                { value: 'target', label: 'Target' },
+                                { value: 'holiday', label: 'THR' },
+                                { value: 'other', label: 'Lainnya' },
+                            ]}
+                            value={bonusType}
+                            onChange={setBonusType}
+                            searchable={false}
+                            ariaLabel="Jenis bonus"
+                        />
+                        <input type="hidden" name="bonus_type" value={bonusType} />
                     </div>
 
                     {/* Amount */}
@@ -115,7 +137,7 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                             required
                             min={0}
                             defaultValue={bonus?.amount || ''}
-                            className="!px-3 !py-2 !rounded-lg !bg-white !border-slate-300 focus:!border-purple-500 focus:!ring-2 focus:!ring-purple-200"
+                            className="!px-3 !py-2.5 !rounded-xl !bg-white !border-slate-200 focus:!border-brand-500 focus:!ring-2 focus:!ring-brand-500/15"
                         />
                     </div>
 
@@ -126,18 +148,17 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
                                     Bulan <span className="text-red-500">*</span>
                                 </label>
-                                <select
-                                    name="period_month"
-                                    required
-                                    defaultValue={currentMonth}
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none"
-                                >
-                                    {[...Array(12)].map((_, i) => (
-                                        <option key={i + 1} value={i + 1}>
-                                            {new Date(2000, i).toLocaleDateString('id-ID', { month: 'long' })}
-                                        </option>
-                                    ))}
-                                </select>
+                                <SelectBox
+                                    options={[...Array(12)].map((_, i) => ({
+                                        value: String(i + 1),
+                                        label: new Date(2000, i).toLocaleDateString('id-ID', { month: 'long' }),
+                                    }))}
+                                    value={periodMonth}
+                                    onChange={setPeriodMonth}
+                                    searchable={false}
+                                    ariaLabel="Bulan periode"
+                                />
+                                <input type="hidden" name="period_month" value={periodMonth} />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -150,7 +171,7 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                                     defaultValue={currentYear}
                                     min={currentYear - 1}
                                     max={currentYear + 1}
-                                    className="!px-3 !py-2 !rounded-lg !bg-white !border-slate-300 focus:!border-purple-500 focus:!ring-2 focus:!ring-purple-200"
+                                    className="!px-3 !py-2.5 !rounded-xl !bg-white !border-slate-200 focus:!border-brand-500 focus:!ring-2 focus:!ring-brand-500/15"
                                 />
                             </div>
                         </div>
@@ -166,7 +187,7 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                             rows={2}
                             defaultValue={bonus?.reason || ''}
                             placeholder="Bonus performa Q4, dll"
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none"
+                            className={inputClass}
                         />
                     </div>
 
@@ -175,9 +196,9 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                         {isEdit && bonus?.status === 'pending' && (
                             <button
                                 type="button"
-                                onClick={handleDelete}
+                                onClick={() => setConfirmDelete(true)}
                                 disabled={loading}
-                                className="px-4 py-2 rounded-lg border-2 border-red-300 text-red-600 font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+                                className="btn-danger"
                             >
                                 Hapus
                             </button>
@@ -186,20 +207,32 @@ export default function BonusModal({ employeeId, bonus, onClose }: BonusModalPro
                             type="button"
                             onClick={onClose}
                             disabled={loading}
-                            className="flex-1 px-4 py-2 rounded-lg border-2 border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+                            className="flex-1 btn-secondary"
                         >
                             Batal
                         </button>
                         <button
                             type="submit"
                             disabled={loading}
-                            className="flex-1 px-4 py-2 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
+                            className="flex-1 btn-primary"
                         >
                             {loading ? 'Menyimpan...' : 'Simpan'}
                         </button>
                     </div>
                 </form>
             </div>
+
+            {/* Konfirmasi hapus bonus */}
+            <ConfirmDialog
+                isOpen={confirmDelete}
+                onClose={() => { if (!loading) setConfirmDelete(false) }}
+                onConfirm={handleDelete}
+                title="Hapus bonus ini?"
+                description="Tindakan ini tidak bisa dibatalkan."
+                confirmText="Hapus"
+                tone="danger"
+                loading={loading}
+            />
         </div>
     )
 }

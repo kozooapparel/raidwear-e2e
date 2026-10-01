@@ -47,7 +47,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     // Customer tier based on total orders
     const getCustomerTier = () => {
         if (totalOrders >= 10) return { label: 'VIP', color: 'bg-amber-500', icon: '👑' }
-        if (totalOrders >= 5) return { label: 'Loyal', color: 'bg-purple-500', icon: '💎' }
+        if (totalOrders >= 5) return { label: 'Loyal', color: 'bg-brand-500', icon: '💎' }
         if (totalOrders >= 2) return { label: 'Repeat', color: 'bg-blue-500', icon: '🔄' }
         return { label: 'New', color: 'bg-emerald-500', icon: '✨' }
     }

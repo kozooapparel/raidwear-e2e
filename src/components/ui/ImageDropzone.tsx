@@ -114,13 +114,13 @@ export default function ImageDropzone({
                 const file = e.dataTransfer.files?.[0]
                 if (file) handleFile(file)
             }}
-            className={`w-full rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${disabled
+            className={`w-full rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500/50 ${disabled
                 ? 'cursor-not-allowed border-slate-200 bg-slate-100 opacity-60'
                 : isDragging
-                    ? 'cursor-pointer border-blue-500 bg-blue-50'
+                    ? 'cursor-pointer border-brand-500 bg-brand-50'
                     : pasteFlash
                         ? 'cursor-pointer border-emerald-500 bg-emerald-50'
-                        : 'cursor-pointer border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/50'
+                        : 'cursor-pointer border-slate-300 bg-white hover:border-brand-400 hover:bg-brand-50/50'
                 }`}
         >
             <input
@@ -138,7 +138,7 @@ export default function ImageDropzone({
             />
 
             <svg
-                className={`mx-auto mb-2 h-8 w-8 ${isDragging ? 'text-blue-500' : 'text-slate-400'}`}
+                className={`mx-auto mb-2 h-8 w-8 ${isDragging ? 'text-brand-500' : 'text-slate-400'}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import EmployeeListClient from '@/components/hr/EmployeeListClient'
+import { PageHeader } from '@/components/ui/ds'
 
 interface Employee {
     id: string
@@ -65,21 +66,21 @@ export default async function EmployeesPage() {
         <DashboardLayout user={profile}>
             <div className="space-y-6">
                 {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold text-slate-900">Kelola Karyawan</h1>
-                        <p className="text-slate-500 mt-1">Manage employee data, salary & allowances</p>
-                    </div>
-                    <Link
-                        href="/hr/employees/add"
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold hover:shadow-lg hover:shadow-red-500/30 transition-all transform hover:scale-105"
-                    >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                        </svg>
-                        Tambah Karyawan
-                    </Link>
-                </div>
+                <PageHeader
+                    title="Kelola Karyawan"
+                    description="Manage employee data, salary & allowances"
+                    actions={
+                        <Link
+                            href="/hr/employees/add"
+                            className="btn-primary"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                            </svg>
+                            Tambah Karyawan
+                        </Link>
+                    }
+                />
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -98,8 +99,8 @@ export default async function EmployeesPage() {
                     </div>
                     <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
                         <div className="flex items-center gap-3">
-                            <div className="p-3 rounded-xl bg-blue-100">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <div className="p-3 rounded-xl bg-brand-50">
+                                <svg className="w-6 h-6 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>

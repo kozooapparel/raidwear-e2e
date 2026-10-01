@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { SearchBar, SelectBox } from '@/components/ui'
+import { EmptyState, DefaultEmptyIcon } from '@/components/ui/ds'
 
 interface Employee {
     id: string
@@ -54,30 +56,26 @@ export default function EmployeeListClient({ employees }: EmployeeListClientProp
         <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Daftar Karyawan</h2>
 
-            {/* Search & Filter */}
+            {/* Pencarian & Filter */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
-                <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Cari nama, NIK, atau posisi..."
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/50"
-                />
-                <select
+                <div className="flex-1">
+                    <SearchBar
+                        onSearch={setSearch}
+                        placeholder="Cari nama, NIK, atau posisi..."
+                    />
+                </div>
+                <SelectBox
+                    options={[
+                        { value: 'all', label: 'Semua Department' },
+                        ...departments.map(dept => ({ value: dept, label: dept })),
+                    ]}
                     value={departmentFilter}
-                    onChange={(e) => setDepartmentFilter(e.target.value)}
-                    className={`px-4 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-red-500/20 transition-all cursor-pointer ${departmentFilter !== 'all'
-                        ? 'bg-slate-700 text-white border-slate-700 font-semibold'
-                        : 'bg-white text-slate-700 border-slate-200'
-                        }`}
-                >
-                    <option value="all" className="bg-white text-slate-700">Semua Department</option>
-                    {departments.map(dept => (
-                        <option key={dept} value={dept} className="bg-white text-slate-700">
-                            {dept}
-                        </option>
-                    ))}
-                </select>
+                    onChange={setDepartmentFilter}
+                    searchable={false}
+                    size="sm"
+                    className="w-full sm:w-56"
+                    ariaLabel="Filter department"
+                />
             </div>
 
             {/* Results count */}
@@ -91,19 +89,19 @@ export default function EmployeeListClient({ employees }: EmployeeListClientProp
                         <Link
                             key={employee.id}
                             href={`/hr/employees/${employee.id}`}
-                            className="block p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-red-300 hover:shadow-md transition-all group"
+                            className="block p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-brand-300 hover:shadow-md transition-all group"
                         >
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-lg font-bold text-white flex-shrink-0">
+                                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-600 flex items-center justify-center text-lg font-bold text-white flex-shrink-0">
                                         {employee.full_name.charAt(0).toUpperCase()}
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <p className="font-semibold text-slate-900 group-hover:text-red-600 transition-colors">
+                                            <p className="font-semibold text-slate-900 group-hover:text-brand-600 transition-colors">
                                                 {employee.full_name}
                                             </p>
-                                            <span className="px-2 py-0.5 rounded-md bg-slate-200 text-xs font-medium text-slate-600">
+                                            <span className="badge badge-neutral">
                                                 {employee.nik}
                                             </span>
                                         </div>
@@ -126,13 +124,11 @@ export default function EmployeeListClient({ employees }: EmployeeListClientProp
                     ))}
                 </div>
             ) : (
-                <div className="text-center py-12">
-                    <svg className="w-16 h-16 mx-auto text-slate-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                    <p className="text-slate-500">Tidak ada karyawan ditemukan</p>
-                    <p className="text-sm text-slate-400 mt-1">Coba ubah kata kunci pencarian</p>
-                </div>
+                <EmptyState
+                    icon={<DefaultEmptyIcon />}
+                    title="Tidak ada karyawan ditemukan"
+                    description="Coba ubah kata kunci pencarian"
+                />
             )}
         </div>
     )

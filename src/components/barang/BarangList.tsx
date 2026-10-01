@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Barang, BarangWithTiers, Brand } from '@/types/database'
 import { getBarangList, createBarang, updateBarang, deleteBarang, getBarangById } from '@/lib/actions/barang'
 import { formatCurrency } from '@/lib/utils/format'
 import { toast } from 'sonner'
 import CurrencyInput from '@/components/ui/CurrencyInput'
 import NumberInput from '@/components/ui/NumberInput'
+import { Modal, ModalFooter, FormField, SelectBox, ConfirmDialog, SearchBar } from '@/components/ui'
+import type { SelectOption } from '@/components/ui'
 import { StatCard, EmptyState, DefaultEmptyIcon } from '@/components/ui/ds'
 
 interface HargaTierInput {
@@ -67,6 +69,16 @@ export default function BarangList({ brands }: BarangListProps) {
     const [loading, setLoading] = useState(true)
     const [showModal, setShowModal] = useState(false)
     const [editingBarang, setEditingBarang] = useState<BarangWithTiers | null>(null)
+    const [saving, setSaving] = useState(false)
+
+    // Konfirmasi hapus
+    const [deleteTarget, setDeleteTarget] = useState<Barang | null>(null)
+    const [deleting, setDeleting] = useState(false)
+
+    // Pencarian produk pada brand aktif
+    const [searchQuery, setSearchQuery] = useState('')
+    // Bump key untuk mereset SearchBar (komponen uncontrolled) saat pindah brand
+    const [searchKey, setSearchKey] = useState(0)
 
     // Form state
     const [formBrandId, setFormBrandId] = useState('')
@@ -77,6 +89,11 @@ export default function BarangList({ brands }: BarangListProps) {
     const [hargaTiers, setHargaTiers] = useState<HargaTierInput[]>([])
 
     const activeBrand = brands.find(b => b.id === activeBrandId)
+
+    const brandOptions: SelectOption[] = useMemo(
+        () => brands.map(b => ({ value: b.id, label: b.name })),
+        [brands]
+    )
 
     const loadBarang = useCallback(async () => {
         if (!activeBrandId) {
@@ -99,6 +116,13 @@ export default function BarangList({ brands }: BarangListProps) {
     useEffect(() => {
         loadBarang()
     }, [loadBarang])
+
+    // Pindah brand sekaligus reset pencarian agar daftar tidak tampak kosong
+    const handleSelectBrand = (brandId: string) => {
+        setActiveBrandId(brandId)
+        setSearchQuery('')
+        setSearchKey((k) => k + 1)
+    }
 
     // Open modal for create
     const openCreateModal = () => {
@@ -161,7 +185,9 @@ export default function BarangList({ brands }: BarangListProps) {
     }
 
     // Save barang
-    const handleSave = async () => {
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault()
+
         if (!namaBarang) {
             toast.warning('Nama barang harus diisi')
             return
@@ -172,6 +198,7 @@ export default function BarangList({ brands }: BarangListProps) {
             return
         }
 
+        setSaving(true)
         try {
             const tierData = hargaTiers.map(t => ({
                 min_qty: t.min_qty,
@@ -187,6 +214,7 @@ export default function BarangList({ brands }: BarangListProps) {
                     harga_satuan: hargaSatuan,
                     kategori: kategori || null
                 }, tierData)
+                toast.success('Barang berhasil diperbarui')
             } else {
                 await createBarang({
                     brand_id: formBrandId,
@@ -195,6 +223,7 @@ export default function BarangList({ brands }: BarangListProps) {
                     harga_satuan: hargaSatuan,
                     kategori: kategori || null
                 }, tierData)
+                toast.success('Barang berhasil ditambahkan')
             }
 
             closeModal()
@@ -202,21 +231,37 @@ export default function BarangList({ brands }: BarangListProps) {
         } catch (error) {
             console.error('Error saving barang:', error)
             toast.error('Gagal menyimpan barang')
+        } finally {
+            setSaving(false)
         }
     }
 
     // Delete barang
-    const handleDelete = async (id: string) => {
-        if (!confirm('Hapus barang ini?')) return
-
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        setDeleting(true)
         try {
-            await deleteBarang(id)
+            await deleteBarang(deleteTarget.id)
+            toast.success('Barang berhasil dihapus')
+            setDeleteTarget(null)
             loadBarang()
         } catch (error) {
             console.error('Error deleting barang:', error)
             toast.error('Gagal menghapus barang')
+        } finally {
+            setDeleting(false)
         }
     }
+
+    // Hasil filter pencarian
+    const filteredBarang = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        if (!q) return barangList
+        return barangList.filter(b =>
+            b.nama_barang.toLowerCase().includes(q) ||
+            (b.kategori || '').toLowerCase().includes(q)
+        )
+    }, [barangList, searchQuery])
 
     // Stats
     const stats = {
@@ -236,9 +281,9 @@ export default function BarangList({ brands }: BarangListProps) {
                     return (
                         <button
                             key={brand.id}
-                            onClick={() => setActiveBrandId(brand.id)}
+                            onClick={() => handleSelectBrand(brand.id)}
                             aria-pressed={isActive}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors focus-ring ${isActive
                                 ? 'bg-slate-800 text-white'
                                 : 'text-slate-600 hover:bg-slate-100'
                                 }`}
@@ -278,19 +323,29 @@ export default function BarangList({ brands }: BarangListProps) {
             </div>
 
             {/* Action bar */}
-            <div className="surface p-3 flex items-center justify-between gap-3">
-                <p className="text-caption">
-                    {barangList.length} produk terdaftar{activeBrand ? ` untuk ${activeBrand.name}` : ''}
-                </p>
-                <button
-                    onClick={openCreateModal}
-                    disabled={brands.length === 0}
-                    className="btn-primary disabled:opacity-50"
-                >
-                    <Icon.Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">Tambah Barang</span>
-                    <span className="sm:hidden">Tambah</span>
-                </button>
+            <div className="surface flex flex-col gap-3 p-3 md:flex-row md:items-center">
+                <div className="min-w-0 flex-1">
+                    <SearchBar
+                        key={searchKey}
+                        onSearch={setSearchQuery}
+                        placeholder="Cari nama barang atau kategori..."
+                    />
+                </div>
+                <div className="flex items-center justify-between gap-3 md:justify-end">
+                    <p className="text-caption whitespace-nowrap">
+                        {filteredBarang.length}
+                        {searchQuery.trim() && ` / ${barangList.length}`} produk
+                    </p>
+                    <button
+                        onClick={openCreateModal}
+                        disabled={brands.length === 0}
+                        className="btn-primary disabled:opacity-50"
+                    >
+                        <Icon.Plus className="w-4 h-4" />
+                        <span className="hidden sm:inline">Tambah Barang</span>
+                        <span className="sm:hidden">Tambah</span>
+                    </button>
+                </div>
             </div>
 
             {/* Table */}
@@ -331,8 +386,23 @@ export default function BarangList({ brands }: BarangListProps) {
                                         />
                                     </td>
                                 </tr>
+                            ) : filteredBarang.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="p-0">
+                                        <EmptyState
+                                            icon={<DefaultEmptyIcon />}
+                                            title="Tidak ada produk yang cocok"
+                                            description="Coba ubah kata kunci pencarian Anda."
+                                            action={
+                                                <button onClick={() => setSearchQuery('')} className="btn-secondary">
+                                                    Reset Pencarian
+                                                </button>
+                                            }
+                                        />
+                                    </td>
+                                </tr>
                             ) : (
-                                barangList.map((barang) => (
+                                filteredBarang.map((barang) => (
                                     <tr key={barang.id} className="hover:bg-slate-50/60 transition-colors">
                                         <td className="px-4 py-3 text-sm font-medium text-slate-900">{barang.nama_barang}</td>
                                         <td className="px-4 py-3 text-sm text-slate-600 text-center">
@@ -359,7 +429,7 @@ export default function BarangList({ brands }: BarangListProps) {
                                                     <Icon.Pencil className="w-4 h-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(barang.id)}
+                                                    onClick={() => setDeleteTarget(barang)}
                                                     className="btn-icon text-red-500 hover:bg-red-50"
                                                     title="Hapus"
                                                     aria-label={`Hapus ${barang.nama_barang}`}
@@ -376,175 +446,178 @@ export default function BarangList({ brands }: BarangListProps) {
                 </div>
             </div>
 
-            {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fadeIn">
-                    <div className="surface-elevated w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-scaleIn">
-                        <div className="p-6 border-b border-slate-200/70">
-                            <h2 className="text-h3 text-slate-900">
-                                {editingBarang ? 'Edit Barang' : 'Tambah Barang'}
-                            </h2>
-                            <p className="text-caption mt-1">
-                                {editingBarang ? 'Perbarui data produk' : 'Tambahkan produk baru ke master barang'}
-                            </p>
+            {/* Modal tambah/edit barang */}
+            <Modal
+                isOpen={showModal}
+                onClose={closeModal}
+                title={editingBarang ? 'Edit Barang' : 'Tambah Barang'}
+                size="2xl"
+            >
+                <form onSubmit={handleSave} className="flex max-h-[calc(100vh-10rem)] flex-col">
+                    <div className="flex-1 space-y-4 overflow-y-auto p-6 scrollbar-thin">
+                        <p className="text-caption -mt-1">
+                            {editingBarang ? 'Perbarui data produk' : 'Tambahkan produk baru ke master barang'}
+                        </p>
+
+                        <FormField
+                            label="Brand"
+                            required
+                            hint="Harga produk ini hanya berlaku untuk brand tersebut."
+                        >
+                            <SelectBox
+                                options={brandOptions}
+                                value={formBrandId}
+                                onChange={setFormBrandId}
+                                placeholder="Pilih Brand"
+                                ariaLabel="Pilih brand"
+                            />
+                        </FormField>
+
+                        <FormField label="Nama Barang" htmlFor="barang-nama" required>
+                            <input
+                                id="barang-nama"
+                                type="text"
+                                value={namaBarang}
+                                onChange={(e) => setNamaBarang(e.target.value)}
+                                className="input"
+                                placeholder="Contoh: Jersey Fullprint Premium 160/170 GMS"
+                            />
+                        </FormField>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <FormField label="Satuan" htmlFor="barang-satuan">
+                                <input
+                                    id="barang-satuan"
+                                    type="text"
+                                    value={satuan}
+                                    onChange={(e) => setSatuan(e.target.value)}
+                                    className="input"
+                                    placeholder="PCS"
+                                />
+                            </FormField>
+                            <FormField label="Harga Satuan Default">
+                                <CurrencyInput
+                                    value={hargaSatuan}
+                                    onChange={setHargaSatuan}
+                                    placeholder="0"
+                                />
+                            </FormField>
                         </div>
 
-                        <div className="p-6 space-y-4">
-                            <div>
-                                <label className="label">Brand *</label>
-                                <select
-                                    value={formBrandId}
-                                    onChange={(e) => setFormBrandId(e.target.value)}
-                                    className="input"
+                        <FormField label="Kategori" htmlFor="barang-kategori" aside={<span className="text-xs text-slate-400">Opsional</span>}>
+                            <input
+                                id="barang-kategori"
+                                type="text"
+                                value={kategori}
+                                onChange={(e) => setKategori(e.target.value)}
+                                className="input"
+                                placeholder="Contoh: Jersey, Kaos, Hoodie"
+                            />
+                        </FormField>
+
+                        {/* Harga Tier */}
+                        <div>
+                            <div className="flex items-center justify-between mb-3">
+                                <label className="label !mb-0">Harga Tier (berdasarkan quantity)</label>
+                                <button
+                                    type="button"
+                                    onClick={addTierRow}
+                                    className="btn-secondary btn-sm"
                                 >
-                                    <option value="">Pilih Brand</option>
-                                    {brands.map(brand => (
-                                        <option key={brand.id} value={brand.id}>{brand.name}</option>
-                                    ))}
-                                </select>
-                                <p className="text-caption mt-1">Harga produk ini hanya berlaku untuk brand tersebut.</p>
+                                    <Icon.Plus className="w-4 h-4" />
+                                    Tambah Tier
+                                </button>
                             </div>
 
-                            <div>
-                                <label className="label">Nama Barang *</label>
-                                <input
-                                    type="text"
-                                    value={namaBarang}
-                                    onChange={(e) => setNamaBarang(e.target.value)}
-                                    className="input"
-                                    placeholder="Contoh: Jersey Fullprint Premium 160/170 GMS"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="label">Satuan</label>
-                                    <input
-                                        type="text"
-                                        value={satuan}
-                                        onChange={(e) => setSatuan(e.target.value)}
-                                        className="input"
-                                        placeholder="PCS"
-                                    />
+                            {hargaTiers.length === 0 ? (
+                                <div className="text-center py-8 surface">
+                                    <Icon.Calculator className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                                    <p className="text-sm text-slate-500">Belum ada tier harga</p>
+                                    <p className="text-xs text-slate-400 mt-1">Harga default akan digunakan untuk semua quantity</p>
                                 </div>
-                                <div>
-                                    <label className="label">Harga Satuan Default</label>
-                                    <CurrencyInput
-                                        value={hargaSatuan}
-                                        onChange={setHargaSatuan}
-                                        placeholder="0"
-                                        className="!py-2"
-                                    />
-                                </div>
-                            </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {hargaTiers.map((tier, index) => (
+                                        <div key={tier.id} className="flex flex-wrap items-center gap-2 p-3 surface hover:border-brand-200 transition-colors">
+                                            {/* Tier Number */}
+                                            <span className="w-6 h-6 bg-brand-50 text-brand-600 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                                {index + 1}
+                                            </span>
 
-                            <div>
-                                <label className="label">Kategori (opsional)</label>
-                                <input
-                                    type="text"
-                                    value={kategori}
-                                    onChange={(e) => setKategori(e.target.value)}
-                                    className="input"
-                                    placeholder="Contoh: Jersey, Kaos, Hoodie"
-                                />
-                            </div>
-
-                            {/* Harga Tier */}
-                            <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <label className="label !mb-0">Harga Tier (berdasarkan quantity)</label>
-                                    <button
-                                        type="button"
-                                        onClick={addTierRow}
-                                        className="btn-secondary btn-sm"
-                                    >
-                                        <Icon.Plus className="w-4 h-4" />
-                                        Tambah Tier
-                                    </button>
-                                </div>
-
-                                {hargaTiers.length === 0 ? (
-                                    <div className="text-center py-8 surface">
-                                        <Icon.Calculator className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                                        <p className="text-sm text-slate-500">Belum ada tier harga</p>
-                                        <p className="text-xs text-slate-400 mt-1">Harga default akan digunakan untuk semua quantity</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {hargaTiers.map((tier, index) => (
-                                            <div key={tier.id} className="flex items-center gap-2 p-3 surface hover:border-brand-200 transition-colors">
-                                                {/* Tier Number */}
-                                                <span className="w-6 h-6 bg-brand-50 text-brand-600 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0">
-                                                    {index + 1}
-                                                </span>
-
-                                                {/* Range: Min - Max pcs */}
-                                                <div className="flex items-center gap-1.5">
-                                                    <NumberInput
-                                                        value={tier.min_qty}
-                                                        onChange={(val) => updateTier(index, 'min_qty', val)}
-                                                        placeholder="1"
-                                                        className="!w-16 !py-1.5 !px-2 text-center text-sm"
-                                                    />
-                                                    <span className="text-slate-400 font-medium">-</span>
-                                                    <NumberInput
-                                                        value={tier.max_qty || 0}
-                                                        onChange={(val) => updateTier(index, 'max_qty', val === 0 ? null : val)}
-                                                        placeholder="∞"
-                                                        allowEmpty
-                                                        className="!w-16 !py-1.5 !px-2 text-center text-sm"
-                                                    />
-                                                    <span className="text-sm text-slate-500 font-medium">pcs</span>
-                                                </div>
-
-                                                {/* Equals Sign */}
-                                                <span className="text-brand-500 font-bold text-lg">=</span>
-
-                                                {/* Price */}
-                                                <div className="flex items-center gap-1 flex-1">
-                                                    <span className="text-sm text-slate-500 font-medium">Rp</span>
-                                                    <CurrencyInput
-                                                        value={tier.harga}
-                                                        onChange={(val) => updateTier(index, 'harga', val)}
-                                                        placeholder="0"
-                                                        showPrefix={false}
-                                                        className="!py-1.5 !px-2 text-sm font-semibold"
-                                                    />
-                                                </div>
-
-                                                {/* Delete Button */}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeTierRow(index)}
-                                                    className="btn-icon text-slate-400 hover:text-red-500"
-                                                    aria-label="Hapus tier"
-                                                >
-                                                    <Icon.Trash className="w-4 h-4" />
-                                                </button>
+                                            {/* Range: Min - Max pcs */}
+                                            <div className="flex items-center gap-1.5">
+                                                <NumberInput
+                                                    value={tier.min_qty}
+                                                    onChange={(val) => updateTier(index, 'min_qty', val)}
+                                                    placeholder="1"
+                                                    className="!w-16 !py-1.5 !px-2 text-center text-sm"
+                                                />
+                                                <span className="text-slate-400 font-medium">-</span>
+                                                <NumberInput
+                                                    value={tier.max_qty || 0}
+                                                    onChange={(val) => updateTier(index, 'max_qty', val === 0 ? null : val)}
+                                                    placeholder="∞"
+                                                    allowEmpty
+                                                    className="!w-16 !py-1.5 !px-2 text-center text-sm"
+                                                />
+                                                <span className="text-sm text-slate-500 font-medium">pcs</span>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
 
-                        <div className="p-6 border-t border-slate-200/70 flex justify-end gap-3">
-                            <button
-                                onClick={closeModal}
-                                className="btn-secondary"
-                            >
-                                Batal
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                className="btn-primary"
-                            >
-                                Simpan
-                            </button>
+                                            {/* Equals Sign */}
+                                            <span className="text-brand-500 font-bold text-lg">=</span>
+
+                                            {/* Price */}
+                                            <div className="flex items-center gap-1 flex-1 min-w-[8rem]">
+                                                <span className="text-sm text-slate-500 font-medium">Rp</span>
+                                                <CurrencyInput
+                                                    value={tier.harga}
+                                                    onChange={(val) => updateTier(index, 'harga', val)}
+                                                    placeholder="0"
+                                                    showPrefix={false}
+                                                    className="!py-1.5 !px-2 text-sm font-semibold"
+                                                />
+                                            </div>
+
+                                            {/* Delete Button */}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeTierRow(index)}
+                                                className="btn-icon text-slate-400 hover:text-red-500"
+                                                aria-label="Hapus tier"
+                                            >
+                                                <Icon.Trash className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
-                </div>
-            )}
+
+                    <div className="border-t border-slate-200/70 p-6 pt-4">
+                        <ModalFooter
+                            onCancel={closeModal}
+                            loading={saving}
+                            submitText={editingBarang ? 'Simpan Perubahan' : 'Simpan'}
+                            variant="primary"
+                        />
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Konfirmasi hapus */}
+            <ConfirmDialog
+                isOpen={deleteTarget !== null}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleDelete}
+                title="Hapus Barang?"
+                description={deleteTarget
+                    ? `Barang "${deleteTarget.nama_barang}" akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`
+                    : undefined}
+                confirmText="Hapus"
+                tone="danger"
+                loading={deleting}
+            />
         </>
     )
 }

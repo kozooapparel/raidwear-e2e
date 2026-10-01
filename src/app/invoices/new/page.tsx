@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { InvoiceForm } from '@/components/invoices'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import { PageHeader } from '@/components/ui/ds'
 
 export default async function NewInvoicePage({
     searchParams
@@ -52,13 +53,10 @@ export default async function NewInvoicePage({
     return (
         <DashboardLayout user={profile}>
             <div className="space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold text-slate-900">Buat Invoice Baru</h1>
-                        <p className="text-slate-500">Buat invoice untuk customer</p>
-                    </div>
-                </div>
+                <PageHeader
+                    title="Buat Invoice Baru"
+                    description="Buat invoice untuk customer"
+                />
 
                 {/* Form */}
                 <InvoiceForm

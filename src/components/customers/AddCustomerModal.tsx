@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Modal, ModalFooter } from '@/components/ui'
+import { Modal, ModalFooter, FormField } from '@/components/ui'
 
 interface CustomerWithStats {
     id: string
@@ -93,49 +93,47 @@ export default function AddCustomerModal({ isOpen, onClose, onCustomerCreated }:
         <Modal isOpen={isOpen} onClose={onClose} title="Tambah Customer Baru">
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
                 {/* Name */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Nama Customer <span className="text-red-400">*</span>
-                    </label>
+                <FormField label="Nama Customer" htmlFor="customer-name" required>
                     <input
+                        id="customer-name"
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="PT Maju Jaya"
-                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-subtle focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="input"
                         required
                     />
-                </div>
+                </FormField>
 
                 {/* Phone */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        No. HP <span className="text-red-400">*</span>
-                    </label>
+                <FormField
+                    label="No. HP"
+                    htmlFor="customer-phone"
+                    required
+                    hint="Gunakan format tanpa spasi atau tanda hubung"
+                >
                     <input
+                        id="customer-phone"
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         placeholder="081234567890"
-                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-subtle focus:outline-none focus:border-emerald-500 transition-colors"
+                        className="input"
                         required
                     />
-                    <p className="text-xs text-slate-500 mt-1">Gunakan format tanpa spasi atau tanda hubung</p>
-                </div>
+                </FormField>
 
                 {/* Alamat */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                        Alamat Lengkap
-                    </label>
+                <FormField label="Alamat Lengkap" htmlFor="customer-alamat" aside={<span className="text-xs text-slate-400">Opsional</span>}>
                     <textarea
+                        id="customer-alamat"
                         value={alamat}
                         onChange={(e) => setAlamat(e.target.value)}
                         placeholder="Jl. Raya No. 123, Kota Bandung"
                         rows={3}
-                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 placeholder-subtle focus:outline-none focus:border-emerald-500 transition-colors resize-none"
+                        className="input resize-none"
                     />
-                </div>
+                </FormField>
 
                 <ModalFooter
                     onCancel={onClose}

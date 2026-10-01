@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { FormOrderEditor, FormOrderDownloadButton } from '@/components/form-order'
 import { hasFormOrderData } from '@/lib/form-order'
 import { getOrderStageReadiness } from '@/lib/order-stage-readiness'
-import { ImageDropzone, CurrencyInput } from '@/components/ui'
+import { ImageDropzone, CurrencyInput, ConfirmDialog } from '@/components/ui'
 import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder } from '@/lib/actions/orders'
 
 type OrderDetailTab = 'detail' | 'payment' | 'stage' | 'form-order'
@@ -115,6 +115,8 @@ export default function OrderDetailModal({
     const [layoutBusy, setLayoutBusy] = useState<string | null>(null)
     const layoutFileInputRef = useRef<HTMLInputElement>(null)
     const wasOpenRef = useRef(false)
+    const [layoutFileToDelete, setLayoutFileToDelete] = useState<LayoutFile | null>(null)
+    const [showDeleteLayoutLinkConfirm, setShowDeleteLayoutLinkConfirm] = useState(false)
     const supabase = useMemo(() => createClient(), [])
 
     // Only callers that explicitly provide a tab override the modal's existing behavior.
@@ -256,7 +258,7 @@ export default function OrderDetailModal({
 
                 const { error: orderError } = await supabase
                     .from('orders')
-                    .update({ brand_id: defaultBrand.id } as any)
+                    .update({ brand_id: defaultBrand.id })
                     .eq('id', order.id)
                     .is('brand_id', null)
                 if (orderError) throw orderError
@@ -322,7 +324,7 @@ export default function OrderDetailModal({
 
             const { error } = await supabase
                 .from('orders')
-                .update({ layout_completed: true, layout_completed_at: new Date().toISOString() } as any)
+                .update({ layout_completed: true, layout_completed_at: new Date().toISOString() })
                 .eq('id', order.id)
             if (error) throw error
 
@@ -366,7 +368,6 @@ export default function OrderDetailModal({
     }
 
     const deleteLayoutFile = async (file: LayoutFile) => {
-        if (!confirm(`Hapus file “${file.originalName}”?`)) return
         setLayoutBusy(`delete-${file.id}`)
         try {
             await storageRequest('/api/storage/files', {
@@ -378,7 +379,7 @@ export default function OrderDetailModal({
                 .update({
                     layout_completed: remainingFiles.length > 0 || Boolean(order.layout_url),
                     layout_completed_at: remainingFiles.length > 0 || order.layout_url ? order.layout_completed_at : null,
-                } as any)
+                })
                 .eq('id', order.id)
             if (error) throw error
             await refreshLayoutFiles()
@@ -388,6 +389,27 @@ export default function OrderDetailModal({
             toast.error(error instanceof Error ? error.message : 'Gagal menghapus file layout')
         } finally {
             setLayoutBusy(null)
+        }
+    }
+
+    // Hapus link layout lama (Google Drive) milik order
+    const deleteLayoutLink = async (targetOrderId: string) => {
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({
+                    layout_url: null,
+                    layout_completed: false,
+                    layout_completed_at: null
+                })
+                .eq('id', targetOrderId)
+
+            if (error) throw error
+            toast.success('Link dihapus')
+            await syncLatestOrder({ close: true })
+        } catch (err) {
+            console.error('Delete layout link error:', err)
+            toast.error('Gagal menghapus link')
         }
     }
 
@@ -787,11 +809,11 @@ export default function OrderDetailModal({
                         <div className="space-y-6">
                             {/* Customer Info - Show at early stages */}
                             {['customer_dp_desain', 'proses_desain', 'proses_layout'].includes(order.stage) && (
-                                <div className="p-4 rounded-xl bg-blue-50 border border-blue-100">
-                                    <p className="text-xs text-blue-600 mb-3 font-medium">Info Customer</p>
+                                <div className="p-4 rounded-xl bg-brand-50 border border-brand-100">
+                                    <p className="text-xs text-brand-600 mb-3 font-medium">Info Customer</p>
                                     <div className="space-y-2">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold">
+                                            <div className="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-bold">
                                                 {order.customer?.name?.charAt(0) || '?'}
                                             </div>
                                             <div>
@@ -835,8 +857,8 @@ export default function OrderDetailModal({
                             )}
 
                             {/* Design Notes */}
-                            <div className="p-4 rounded-xl bg-violet-50 border border-violet-100">
-                                <p className="text-xs text-violet-600 mb-2 flex items-center gap-1 font-medium">
+                            <div className="p-4 rounded-xl bg-brand-50 border border-brand-100">
+                                <p className="text-xs text-brand-600 mb-2 flex items-center gap-1 font-medium">
                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                     </svg>
@@ -846,7 +868,7 @@ export default function OrderDetailModal({
                                     value={designNotes}
                                     onChange={(e) => setDesignNotes(e.target.value)}
                                     placeholder="Tambahkan catatan desain..."
-                                    className="w-full px-3 py-2 rounded-lg bg-white border border-violet-200 text-slate-900 placeholder-subtle focus:outline-none focus:border-violet-500 resize-none text-sm"
+                                    className="w-full px-3 py-2 rounded-lg bg-white border border-brand-200 text-slate-900 placeholder-subtle focus:outline-none focus:border-brand-500 resize-none text-sm"
                                     rows={3}
                                 />
                                 <button
@@ -867,7 +889,7 @@ export default function OrderDetailModal({
                                         }
                                     }}
                                     disabled={savingNotes}
-                                    className="mt-2 px-4 py-2 rounded-lg bg-violet-500 text-white text-sm font-medium hover:bg-violet-600 disabled:opacity-50 transition-colors"
+                                    className="mt-2 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
                                 >
                                     {savingNotes ? 'Menyimpan...' : 'Simpan Catatan'}
                                 </button>
@@ -929,10 +951,10 @@ export default function OrderDetailModal({
 
                             {/* SPK Number */}
                             {order.spk_number && (
-                                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between">
+                                <div className="p-3 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-between">
                                     <div>
-                                        <p className="text-xs text-blue-600">Nomor SPK</p>
-                                        <p className="font-mono font-bold text-blue-800">{order.spk_number}</p>
+                                        <p className="text-xs text-brand-600">Nomor SPK</p>
+                                        <p className="font-mono font-bold text-brand-800">{order.spk_number}</p>
                                     </div>
                                     <FormOrderDownloadButton
                                         order={order}
@@ -947,13 +969,13 @@ export default function OrderDetailModal({
                         <div className="space-y-4">
                             {/* Invoice Info Card - Show if invoice exists */}
                             {orderInvoice && (
-                                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
+                                <div className="p-4 rounded-xl bg-brand-50 border border-brand-200">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <svg className="w-5 h-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
-                                            <span className="text-sm font-semibold text-blue-800">Invoice</span>
+                                            <span className="text-sm font-semibold text-brand-800">Invoice</span>
                                         </div>
                                         <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
                                             ✓ Dibuat
@@ -974,7 +996,7 @@ export default function OrderDetailModal({
                                                 {formatCurrency(order.dp_desain_amount + order.dp_produksi_amount + order.pelunasan_amount)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between text-sm pt-2 border-t border-blue-200">
+                                        <div className="flex justify-between text-sm pt-2 border-t border-brand-200">
                                             <span className="text-slate-700 font-medium">Sisa Tagihan</span>
                                             {(() => {
                                                 const totalDibayar = order.dp_desain_amount + order.dp_produksi_amount + order.pelunasan_amount
@@ -989,7 +1011,7 @@ export default function OrderDetailModal({
                                     </div>
                                     <Link
                                         href={`/invoices/${orderInvoice.id}`}
-                                        className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                                        className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
                                     >
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -1002,15 +1024,15 @@ export default function OrderDetailModal({
 
                             {/* Create Invoice Button - Show if invoice doesn't exist yet (accessible from any stage) */}
                             {!orderInvoice && (
-                                <div className="p-4 rounded-xl bg-orange-50 border border-orange-200">
+                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
-                                            <span className="text-sm font-semibold text-orange-800">Invoice</span>
+                                            <span className="text-sm font-semibold text-amber-800">Invoice</span>
                                         </div>
-                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
                                             Belum dibuat
                                         </span>
                                     </div>
@@ -1019,7 +1041,7 @@ export default function OrderDetailModal({
                                     </p>
                                     <Link
                                         href={`/invoices/new?order_id=${order.id}`}
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 transition-colors"
+                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
                                     >
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1392,18 +1414,18 @@ export default function OrderDetailModal({
                             {order.stage === 'dp_produksi' && (
                                 <div className="space-y-2">
                                     {/* Invoice Status Row */}
-                                    <div className={`p-3 rounded-lg flex items-center justify-between ${orderInvoice ? 'bg-emerald-50 border border-emerald-200' : 'bg-orange-50 border border-orange-200'}`}>
+                                    <div className={`p-3 rounded-lg flex items-center justify-between ${orderInvoice ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
                                         <div className="flex items-center gap-2">
                                             {orderInvoice ? (
                                                 <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                             ) : (
-                                                <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                             )}
-                                            <span className={`font-medium ${orderInvoice ? 'text-emerald-700' : 'text-orange-700'}`}>
+                                            <span className={`font-medium ${orderInvoice ? 'text-emerald-700' : 'text-amber-700'}`}>
                                                 Invoice
                                             </span>
                                             {orderInvoice && (
@@ -1420,7 +1442,7 @@ export default function OrderDetailModal({
                                         ) : (
                                             <Link
                                                 href={`/invoices/new?order_id=${order.id}`}
-                                                className="px-3 py-1 text-xs font-medium rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors"
+                                                className="px-3 py-1 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
                                             >
                                                 + Buat
                                             </Link>
@@ -1452,22 +1474,22 @@ export default function OrderDetailModal({
                                     {(() => {
                                         const hasFormOrder = hasFormOrderData(order)
                                         return (
-                                            <div className={`p-3 rounded-lg flex items-center justify-between ${hasFormOrder ? 'bg-emerald-50 border border-emerald-200' : 'bg-orange-50 border border-orange-200'}`}>
+                                            <div className={`p-3 rounded-lg flex items-center justify-between ${hasFormOrder ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
                                                 <div className="flex items-center gap-2">
                                                     {hasFormOrder ? (
                                                         <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                         </svg>
                                                     ) : (
-                                                        <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                                         </svg>
                                                     )}
-                                                    <span className={`font-medium ${hasFormOrder ? 'text-emerald-700' : 'text-orange-700'}`}>
+                                                    <span className={`font-medium ${hasFormOrder ? 'text-emerald-700' : 'text-amber-700'}`}>
                                                         Form Order
                                                     </span>
                                                 </div>
-                                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${hasFormOrder ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${hasFormOrder ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                                     {hasFormOrder ? '✓ Sudah diisi' : 'Belum diisi'}
                                                 </span>
                                             </div>
@@ -1494,7 +1516,7 @@ export default function OrderDetailModal({
                                 <div className="border border-slate-200 rounded-xl p-4 bg-white">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <svg className="w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                             </svg>
                                             <p className="text-sm font-medium text-slate-900">
@@ -1518,7 +1540,7 @@ export default function OrderDetailModal({
                                                 {file.status === 'ready' && <>
                                                     <button onClick={() => void openLayoutFile(file, false)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Buka</button>
                                                     <button onClick={() => void openLayoutFile(file, true)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Download</button>
-                                                    {order.stage === 'proses_layout' && <button onClick={() => void deleteLayoutFile(file)} disabled={layoutBusy !== null} className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Hapus</button>}
+                                                    {order.stage === 'proses_layout' && <button onClick={() => setLayoutFileToDelete(file)} disabled={layoutBusy !== null} className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Hapus</button>}
                                                 </>}
                                             </div>
                                         ))}
@@ -1531,8 +1553,8 @@ export default function OrderDetailModal({
                                         )}
                                         {order.stage === 'proses_layout' && <>
                                             <input ref={layoutFileInputRef} type="file" className="hidden" onChange={(event) => void handleLayoutFileSelect(event)} />
-                                            <button onClick={() => layoutFileInputRef.current?.click()} disabled={layoutBusy === 'upload' || !order.brand_id} className="w-full rounded-lg bg-blue-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-600 disabled:opacity-50">{layoutFiles.length > 0 ? 'Ganti File' : 'Upload File Layout'}</button>
-                                            {layoutUploadProgress !== null && <div><div className="mb-1 flex justify-between text-xs text-slate-500"><span>Status upload</span><span>{layoutUploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${layoutUploadProgress}%` }} /></div></div>}
+                                            <button onClick={() => layoutFileInputRef.current?.click()} disabled={layoutBusy === 'upload' || !order.brand_id} className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{layoutFiles.length > 0 ? 'Ganti File' : 'Upload File Layout'}</button>
+                                            {layoutUploadProgress !== null && <div><div className="mb-1 flex justify-between text-xs text-slate-500"><span>Status upload</span><span>{layoutUploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${layoutUploadProgress}%` }} /></div></div>}
                                         </>}
                                     </div>
 
@@ -1553,28 +1575,10 @@ export default function OrderDetailModal({
                                             Delete button - only on proses_layout
                                             {legacyOrder.stage === 'proses_layout' && (
                                                 <button
-                                                    onClick={async () => {
-                                                        if (!confirm('Hapus link layout ini?')) return
-
-                                                        try {
-                                                            const { error } = await supabase
-                                                                .from('orders')
-                                                                .update({
-                                                                    layout_url: null,
-                                                                    layout_completed: false,
-                                                                    layout_completed_at: null
-                                                                } as any)
-                                                                .eq('id', legacyOrder.id)
-
-                                                            if (error) throw error
-                                                            toast.success('Link dihapus')
-                                                            await syncLatestOrder({ close: true })
-                                                        } catch (err) {
-                                                            toast.error('Gagal menghapus link')
-                                                        }
-                                                    }}
+                                                    onClick={() => setShowDeleteLayoutLinkConfirm(true)}
                                                     className="px-3 py-2.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
                                                     title="Hapus Link"
+                                                    aria-label="Hapus link layout"
                                                 >
                                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1647,12 +1651,12 @@ export default function OrderDetailModal({
 
                             {/* Design Gatekeeper Warning for proses_desain */}
                             {order.stage === 'proses_desain' && !order.mockup_url && (
-                                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center gap-3">
-                                    <svg className="w-6 h-6 text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3">
+                                    <svg className="w-6 h-6 text-brand-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
                                     <div>
-                                        <p className="text-blue-400 font-medium">Desain belum diupload</p>
+                                        <p className="text-brand-600 font-medium">Desain belum diupload</p>
                                         <p className="text-sm text-slate-500">Upload desain yang sudah di-ACC customer untuk pindah ke DP Produksi</p>
                                     </div>
                                 </div>
@@ -1697,32 +1701,6 @@ export default function OrderDetailModal({
                                         </div>
                                     )}
 
-                                    {showDeleteMockupConfirm && (
-                                        <div className="p-3 rounded-lg bg-red-50 border border-red-200 space-y-3">
-                                            <p className="text-sm text-red-700">
-                                                Hapus desain final ini? File akan dihapus permanen dan order dianggap belum punya desain.
-                                            </p>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleDeleteMockup}
-                                                    disabled={deletingMockup}
-                                                    className="px-3 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                                >
-                                                    {deletingMockup ? 'Menghapus...' : 'Ya, Hapus'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowDeleteMockupConfirm(false)}
-                                                    disabled={deletingMockup}
-                                                    className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                                                >
-                                                    Batal
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     <ImageDropzone
                                         onFileSelect={handleMockupUpload}
                                         onError={(message) => toast.error(message)}
@@ -1759,7 +1737,7 @@ export default function OrderDetailModal({
 
                             {/* Tracking Number Input for Pengiriman Stage */}
                             {order.stage === 'pengiriman' && (
-                                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30">
+                                <div className="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30">
                                     <p className="text-sm font-medium text-slate-900 mb-2">No. Resi / Tracking Number</p>
                                     <div className="flex gap-2">
                                         <input
@@ -1767,12 +1745,12 @@ export default function OrderDetailModal({
                                             value={trackingNumber}
                                             onChange={(e) => setTrackingNumber(e.target.value)}
                                             placeholder="JNE123456789"
-                                            className="flex-1 px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                                            className="flex-1 px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                                         />
                                         <button
                                             onClick={handleSaveTrackingNumber}
                                             disabled={loading || !trackingNumber.trim()}
-                                            className="px-4 py-2 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            className="px-4 py-2 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                         >
                                             {loading ? 'Saving...' : 'Simpan'}
                                         </button>
@@ -1888,7 +1866,7 @@ export default function OrderDetailModal({
                                 <button
                                     onClick={handleMoveToNextStage}
                                     disabled={loading || !canMoveToNextStage()}
-                                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white font-semibold hover:from-brand-600 hover:to-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                                 >
                                     {loading ? (
                                         <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -1989,80 +1967,78 @@ export default function OrderDetailModal({
             )}
 
             {/* Delete Confirmation Dialog */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl p-6 max-w-md mx-4 shadow-xl">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-red-700">Hapus Permanen?</h3>
-                                <p className="text-sm text-slate-500">{order.customer?.name}</p>
-                            </div>
-                        </div>
-                        <p className="text-slate-600 mb-6">
-                            <strong>PERMANEN:</strong> semua data transaksi yang khusus untuk order ini akan dihapus dan tidak dapat dipulihkan. Ini mencakup invoice, item invoice, kuitansi, pembayaran terkait, dan file layout R2 milik order ini.
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowDeleteConfirm(false)}
-                                disabled={deleting}
-                                className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 disabled:opacity-50"
-                            >
-                                Batal
-                            </button>
-                            <button
-                                onClick={handleDeleteOrder}
-                                disabled={deleting}
-                                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50"
-                            >
-                                {deleting ? 'Menghapus...' : 'Hapus Permanen'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDialog
+                isOpen={showDeleteConfirm}
+                onClose={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDeleteOrder}
+                title="Hapus Permanen?"
+                description={`Semua data transaksi khusus untuk order ${order.customer?.name ?? ''} akan dihapus dan tidak dapat dipulihkan — termasuk invoice, item invoice, kuitansi, pembayaran terkait, dan file layout R2 milik order ini.`}
+                confirmText="Hapus Permanen"
+                loading={deleting}
+                icon={
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                }
+            />
 
             {/* Archive Confirmation Dialog */}
-            {showArchiveConfirm && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl p-6 max-w-md mx-4 shadow-xl">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                                <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900">Arsipkan Order?</h3>
-                                <p className="text-sm text-slate-500">{order.customer?.name}</p>
-                            </div>
-                        </div>
-                        <p className="text-slate-600 mb-6">
-                            Order akan dikeluarkan dari proses aktif, tetapi invoice, kuitansi, pembayaran, dan riwayat order tetap tersimpan. Anda dapat memulihkannya kapan saja dari halaman Riwayat Order.
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowArchiveConfirm(false)}
-                                disabled={archiving}
-                                className="flex-1 px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 disabled:opacity-50"
-                            >
-                                Batal
-                            </button>
-                            <button
-                                onClick={handleArchiveOrder}
-                                disabled={archiving}
-                                className="flex-1 px-4 py-2 rounded-lg bg-amber-500 text-white font-medium hover:bg-amber-600 disabled:opacity-50"
-                            >
-                                {archiving ? 'Mengarsip...' : 'Ya, Arsipkan'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <ConfirmDialog
+                isOpen={showArchiveConfirm}
+                onClose={() => setShowArchiveConfirm(false)}
+                onConfirm={handleArchiveOrder}
+                title="Arsipkan Order?"
+                description="Order akan dikeluarkan dari proses aktif, tetapi invoice, kuitansi, pembayaran, dan riwayat order tetap tersimpan. Anda dapat memulihkannya kapan saja dari halaman Riwayat Order."
+                confirmText="Ya, Arsipkan"
+                tone="brand"
+                loading={archiving}
+                icon={
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                }
+            />
+
+            {/* Konfirmasi hapus file layout */}
+            <ConfirmDialog
+                isOpen={layoutFileToDelete !== null}
+                onClose={() => {
+                    if (!layoutBusy) setLayoutFileToDelete(null)
+                }}
+                onConfirm={async () => {
+                    if (!layoutFileToDelete) return
+                    await deleteLayoutFile(layoutFileToDelete)
+                    setLayoutFileToDelete(null)
+                }}
+                title="Hapus File Layout"
+                description={layoutFileToDelete ? `Hapus file "${layoutFileToDelete.originalName}"?` : undefined}
+                confirmText="Hapus"
+                loading={layoutBusy !== null}
+            />
+
+            {/* Konfirmasi hapus link layout lama */}
+            <ConfirmDialog
+                isOpen={showDeleteLayoutLinkConfirm}
+                onClose={() => setShowDeleteLayoutLinkConfirm(false)}
+                onConfirm={async () => {
+                    setShowDeleteLayoutLinkConfirm(false)
+                    await deleteLayoutLink(order.id)
+                }}
+                title="Hapus Link Layout"
+                description="Hapus link layout ini?"
+                confirmText="Hapus"
+            />
+
+            {/* Konfirmasi hapus desain final */}
+            <ConfirmDialog
+                isOpen={showDeleteMockupConfirm}
+                onClose={() => setShowDeleteMockupConfirm(false)}
+                onConfirm={handleDeleteMockup}
+                title="Hapus Desain Final?"
+                description="File akan dihapus permanen dan order dianggap belum punya desain."
+                confirmText="Ya, Hapus"
+                loading={deletingMockup}
+            />
         </div >
     )
 }

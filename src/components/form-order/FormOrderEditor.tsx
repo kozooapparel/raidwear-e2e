@@ -58,7 +58,7 @@ function ImageSlot({
     return (
         <div
             onClick={() => onSelectTarget(slot)}
-            className={`rounded-xl border overflow-hidden transition-colors ${active ? 'border-blue-400 ring-1 ring-blue-200' : 'border-slate-200'
+            className={`rounded-xl border overflow-hidden transition-colors ${active ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
                 } ${className || ''}`}
         >
             <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
@@ -194,7 +194,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
         <div className="space-y-5">
             {/* Header: Logo brand + FORM ORDER PRODUKSI (otomatis) */}
             <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 flex items-center gap-4">
+                <div className="p-4 bg-gradient-to-r from-brand-600 to-brand-700 flex items-center gap-4">
                     {order.brand?.logo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -209,7 +209,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     )}
                     <div>
                         <h2 className="text-lg font-bold text-white leading-tight">FORM ORDER PRODUKSI</h2>
-                        <p className="text-blue-100 text-xs">
+                        <p className="text-brand-100 text-xs">
                             {order.brand?.name || ''}{order.brand?.name ? ' · ' : ''}
                             {order.nama_po || order.spk_number || 'Order Produksi'}
                         </p>
@@ -228,7 +228,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     </div>
                     <div className="p-4">
                         <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Deadline Produksi</p>
-                        <p className="text-sm font-semibold text-blue-700 mt-1">
+                        <p className="text-sm font-semibold text-brand-700 mt-1">
                             {formatTanggal(getDeadlineProduksi(order.created_at))}
                             <span className="block text-[10px] font-normal text-slate-400">
                                 {PRODUKSI_DURATION_DAYS} hari sejak order dibuat
@@ -372,7 +372,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                 {/* Kanan atas: List Order — memanjang ke bawah */}
                 <div
                     onClick={() => setPasteTarget('list')}
-                    className={`rounded-xl border overflow-hidden h-fit transition-colors ${pasteTarget === 'list' ? 'border-blue-400 ring-1 ring-blue-200' : 'border-slate-200'
+                    className={`rounded-xl border overflow-hidden h-fit transition-colors ${pasteTarget === 'list' ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
                         }`}
                 >
                     <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
@@ -423,7 +423,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     type="button"
                     onClick={handleSave}
                     disabled={saving || isLoading}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all flex items-center gap-2"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 text-white font-semibold hover:from-brand-700 hover:to-brand-800 disabled:opacity-50 transition-all flex items-center gap-2"
                 >
                     <Upload className="w-4 h-4" />
                     {saving ? 'Menyimpan...' : 'Simpan Form Order'}

@@ -6,7 +6,8 @@ import { unarchiveOrder } from '@/lib/actions/orders'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { PageHeader, EmptyState, DefaultEmptyIcon, StatCard } from '@/components/ui/ds'
-import { DateRangeFilter } from '@/components/ui'
+import { DateRangeFilter, SearchBar, SelectBox } from '@/components/ui'
+import type { SelectOption } from '@/components/ui'
 import { DEFAULT_DATE_RANGE, DateRangeValue, formatRangeLabel, isDateInRange } from '@/lib/utils/date-range'
 
 interface ArchivedOrder extends Order {
@@ -28,19 +29,15 @@ interface OrderHistoryClientProps {
 
 type SortOption = 'date_desc' | 'date_asc' | 'customer_asc' | 'customer_desc'
 
+const SORT_OPTIONS: SelectOption[] = [
+    { value: 'date_desc', label: 'Terbaru' },
+    { value: 'date_asc', label: 'Terlama' },
+    { value: 'customer_asc', label: 'Customer A-Z' },
+    { value: 'customer_desc', label: 'Customer Z-A' },
+]
+
 // Icons (Heroicons v2, strokeWidth 1.7)
 const Icon = {
-    Search: (p: { className?: string }) => (
-        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-        </svg>
-    ),
-    Tag: (p: { className?: string }) => (
-        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-        </svg>
-    ),
     Eye: (p: { className?: string }) => (
         <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -73,15 +70,22 @@ const Icon = {
 export default function OrderHistoryClient({ orders, brands }: OrderHistoryClientProps) {
     const router = useRouter()
     const [searchQuery, setSearchQuery] = useState('')
+    // Dipakai untuk mereset input SearchBar (komponen uncontrolled)
+    const [searchKey, setSearchKey] = useState(0)
     const [restoring, setRestoring] = useState<string | null>(null)
     const [selectedDetail, setSelectedDetail] = useState<string | null>(null)
 
     // Filter states
     const [dateRange, setDateRange] = useState<DateRangeValue>(DEFAULT_DATE_RANGE)
-    const [brandFilter, setBrandFilter] = useState<string>('all')
+    const [brandFilter, setBrandFilter] = useState<string>('')
     const [sortBy, setSortBy] = useState<SortOption>('date_desc')
     const [currentPage, setCurrentPage] = useState(1)
     const ITEMS_PER_PAGE = 20
+
+    const brandOptions = useMemo<SelectOption[]>(
+        () => brands.map(brand => ({ value: brand.id, label: brand.name, meta: brand.code })),
+        [brands]
+    )
 
     // Filter and sort orders
     const filteredOrders = useMemo(() => {
@@ -97,7 +101,7 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
             if (!matchesSearch) return false
 
             // Brand filter
-            if (brandFilter !== 'all' && order.brand_id !== brandFilter) return false
+            if (brandFilter && order.brand_id !== brandFilter) return false
 
             // Date range filter (berdasarkan tanggal kirim)
             if (!isDateInRange(order.shipped_at, dateRange)) return false
@@ -195,13 +199,14 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
 
     const clearFilters = () => {
         setDateRange(DEFAULT_DATE_RANGE)
-        setBrandFilter('all')
+        setBrandFilter('')
         setSearchQuery('')
+        setSearchKey(key => key + 1)
         setSortBy('date_desc')
         setCurrentPage(1)
     }
 
-    const hasActiveFilters = dateRange.preset !== 'allTime' || searchQuery !== '' || brandFilter !== 'all'
+    const hasActiveFilters = dateRange.preset !== 'allTime' || searchQuery !== '' || brandFilter !== ''
 
     return (
         <div className="space-y-6">
@@ -215,15 +220,11 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
                     </span>
                 }
                 actions={
-                    <div className="relative w-full sm:w-80">
-                        <Icon.Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
+                    <div className="w-full sm:w-80">
+                        <SearchBar
+                            key={searchKey}
+                            onSearch={(value) => { setSearchQuery(value); setCurrentPage(1) }}
                             placeholder="Cari customer, PO, resi..."
-                            value={searchQuery}
-                            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1) }}
-                            className="input pl-9 w-full"
-                            aria-label="Cari order"
                         />
                     </div>
                 }
@@ -263,53 +264,30 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
 
                 {/* Brand */}
                 <div>
-                    <label htmlFor="filter-brand" className="label text-[11px] mb-1 block text-slate-500">Brand</label>
-                    <div className="relative">
-                        <select
-                            id="filter-brand"
-                            value={brandFilter}
-                            onChange={(e) => { setBrandFilter(e.target.value); setCurrentPage(1) }}
-                            className={`input !pl-9 !pr-9 w-full appearance-none cursor-pointer ${brandFilter !== 'all'
-                                ? '!bg-slate-700 !text-white !border-slate-700 font-semibold'
-                                : ''
-                                }`}
-                            aria-label="Filter brand"
-                        >
-                            <option value="all">Semua</option>
-                            {brands.map(brand => (
-                                <option key={brand.id} value={brand.id}>
-                                    {brand.name}
-                                </option>
-                            ))}
-                        </select>
-                        <Icon.Tag className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-500'}`} />
-                        <svg
-                            className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-400'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={1.7}
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                        </svg>
-                    </div>
+                    <span className="label text-[11px] mb-1 block text-slate-500">Brand</span>
+                    <SelectBox
+                        options={brandOptions}
+                        value={brandFilter}
+                        onChange={(value) => { setBrandFilter(value); setCurrentPage(1) }}
+                        clearable
+                        clearLabel="Semua"
+                        placeholder="Semua"
+                        ariaLabel="Filter brand"
+                        className="w-full"
+                    />
                 </div>
 
                 {/* Urutkan */}
                 <div>
-                    <label htmlFor="filter-sort" className="label text-[11px] mb-1 block text-slate-500">Urutkan</label>
-                    <select
-                        id="filter-sort"
+                    <span className="label text-[11px] mb-1 block text-slate-500">Urutkan</span>
+                    <SelectBox
+                        options={SORT_OPTIONS}
                         value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value as SortOption)}
-                        className="input w-full"
-                        aria-label="Urutkan"
-                    >
-                        <option value="date_desc">Terbaru</option>
-                        <option value="date_asc">Terlama</option>
-                        <option value="customer_asc">Customer A-Z</option>
-                        <option value="customer_desc">Customer Z-A</option>
-                    </select>
+                        onChange={(value) => { setSortBy(value as SortOption); setCurrentPage(1) }}
+                        searchable={false}
+                        ariaLabel="Urutkan"
+                        className="w-full"
+                    />
                 </div>
 
                 {/* Reset */}
@@ -340,7 +318,7 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
                                 <div className="flex items-center justify-between gap-2">
                                     <span className="text-xs font-semibold text-slate-700 truncate">{brand.name}</span>
                                     {brand.code && (
-                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded shrink-0">
+                                        <span className="badge badge-neutral text-mono shrink-0">
                                             {brand.code}
                                         </span>
                                     )}
@@ -413,7 +391,7 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
                                                         {order.customer?.name || '-'}
                                                     </span>
                                                     {order.brand && (
-                                                        <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
+                                                        <span className="badge badge-neutral text-mono">
                                                             {order.brand.code || order.brand.name}
                                                         </span>
                                                     )}
@@ -554,7 +532,7 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
                                                 {order.customer?.name || '-'}
                                             </span>
                                             {order.brand && (
-                                                <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
+                                                <span className="badge badge-neutral text-mono">
                                                     {order.brand.code || order.brand.name}
                                                 </span>
                                             )}
@@ -658,7 +636,7 @@ export default function OrderHistoryClient({ orders, brands }: OrderHistoryClien
                                 key={page}
                                 onClick={() => setCurrentPage(page)}
                                 className={`w-8 h-8 text-sm rounded-lg transition-colors ${page === currentPage
-                                    ? 'bg-brand text-white font-semibold'
+                                    ? 'bg-brand-600 text-white font-semibold'
                                     : 'hover:bg-slate-100 text-slate-600'
                                     }`}
                                 aria-current={page === currentPage ? 'page' : undefined}

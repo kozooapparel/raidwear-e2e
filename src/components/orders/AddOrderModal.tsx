@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Brand, Customer, OrderInsert, OrderWithCustomer } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
+import CustomerPicker from './CustomerPicker'
+import QuickCreateCustomerModal from './QuickCreateCustomerModal'
 
 interface AddOrderModalProps {
     isOpen: boolean
@@ -20,7 +22,20 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
     const [brandId, setBrandId] = useState('')
     const [customerId, setCustomerId] = useState('')
 
+    // Customer baru yang dibuat dari dalam modal ini (belum ikut ter-refresh dari server)
+    const [createdCustomers, setCreatedCustomers] = useState<Customer[]>([])
+    const [quickCreateOpen, setQuickCreateOpen] = useState(false)
+    const [quickCreateName, setQuickCreateName] = useState('')
+
     const supabase = useMemo(() => createClient(), [])
+
+    // Daftar customer = data dari server + customer yang baru saja dibuat di sesi ini
+    const allCustomers = useMemo(() => {
+        if (createdCustomers.length === 0) return customers
+        const createdIds = new Set(createdCustomers.map(c => c.id))
+        return [...createdCustomers, ...customers.filter(c => !createdIds.has(c.id))]
+            .sort((a, b) => a.name.localeCompare(b.name))
+    }, [customers, createdCustomers])
 
     // Fetch brands on mount
     useEffect(() => {
@@ -49,6 +64,10 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
+        if (!customerId) {
+            setError('Pilih customer terlebih dahulu')
+            return
+        }
         setLoading(true)
         setError(null)
 
@@ -103,7 +122,20 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
     const resetForm = () => {
         setCustomerId('')
         setError(null)
+        setQuickCreateName('')
         // Keep brand selection for convenience
+    }
+
+    const openQuickCreateCustomer = (typedQuery: string) => {
+        setQuickCreateName(typedQuery.trim())
+        setQuickCreateOpen(true)
+    }
+
+    // Customer baru langsung dipakai pada order yang sedang dibuat
+    const handleCustomerSaved = (customer: Customer) => {
+        setCreatedCustomers(prev => prev.some(c => c.id === customer.id) ? prev : [...prev, customer])
+        setCustomerId(customer.id)
+        setQuickCreateName('')
     }
 
     if (!isOpen) return null
@@ -119,13 +151,25 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
             />
 
             {/* Modal */}
-            <div className="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl m-4">
+            <div
+                className="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl m-4"
+                onKeyDown={(e) => {
+                    if (e.key === 'Escape') onClose()
+                }}
+            >
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                    <h2 className="text-xl font-bold text-slate-900">Tambah Order Baru</h2>
+                <div className="px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-900">Tambah Order Baru</h2>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                            Pilih brand dan customer, order masuk ke tahap DP Desain.
+                        </p>
+                    </div>
                     <button
+                        type="button"
                         onClick={onClose}
-                        className="p-2 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-900 transition-colors"
+                        aria-label="Tutup"
+                        className="p-1.5 -mr-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
                     >
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -136,15 +180,15 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="p-6 space-y-5">
                     {error && (
-                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm">
                             {error}
                         </div>
                     )}
 
                     {/* Brand Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Brand *
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            Brand <span className="text-brand-600">*</span>
                         </label>
                         <div className="flex gap-2">
                             {brands.map((brand) => (
@@ -153,7 +197,7 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
                                     type="button"
                                     onClick={() => setBrandId(brand.id)}
                                     className={`flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 transition-all ${brandId === brand.id
-                                        ? 'border-blue-500 bg-blue-50'
+                                        ? 'border-brand-500 bg-brand-50'
                                         : 'border-slate-200 hover:border-slate-300'
                                         }`}
                                 >
@@ -168,7 +212,7 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
                                             {brand.code}
                                         </span>
                                     )}
-                                    <span className={`text-sm font-medium ${brandId === brand.id ? 'text-blue-700' : 'text-slate-700'}`}>
+                                    <span className={`text-sm font-medium ${brandId === brand.id ? 'text-brand-700' : 'text-slate-700'}`}>
                                         {brand.name}
                                     </span>
                                 </button>
@@ -176,39 +220,42 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
                         </div>
                         {selectedBrand && (
                             <p className="text-xs text-slate-400 mt-2">
-                                Invoice prefix: <span className="font-medium">{selectedBrand.invoice_prefix}</span>
+                                Invoice prefix: <span className="font-medium text-slate-500">{selectedBrand.invoice_prefix}</span>
                             </p>
                         )}
                     </div>
 
                     {/* Customer Selection */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Customer *
-                        </label>
-                        <select
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                            <label className="block text-sm font-semibold text-slate-700">
+                                Customer <span className="text-brand-600">*</span>
+                            </label>
+                            <button
+                                type="button"
+                                onClick={() => openQuickCreateCustomer('')}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 transition-colors hover:text-brand-700"
+                            >
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+                                    <path d="M12 5v14M5 12h14" />
+                                </svg>
+                                Customer Baru
+                            </button>
+                        </div>
+                        <CustomerPicker
                             value={customerId}
-                            onChange={(e) => setCustomerId(e.target.value)}
-                            required
-                            className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                        >
-                            <option value="">Pilih Customer</option>
-                            {customers.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                    {c.name} - {c.phone}
-                                </option>
-                            ))}
-                        </select>
-                        <p className="text-xs text-slate-400 mt-1">
-                            Tambah customer baru di menu <span className="font-medium">Customers</span>
-                        </p>
+                            customers={allCustomers}
+                            onSelect={(customer) => setCustomerId(customer.id)}
+                            onClear={() => setCustomerId('')}
+                            onCreateNew={openQuickCreateCustomer}
+                        />
                     </div>
 
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={loading || !brandId}
-                        className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold hover:from-emerald-600 hover:to-teal-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        disabled={loading || !brandId || !customerId}
+                        className="w-full py-3 px-4 rounded-xl bg-brand-600 text-white font-semibold hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                         {loading ? (
                             <span className="inline-flex items-center">
@@ -224,6 +271,14 @@ export default function AddOrderModal({ isOpen, onClose, customers, onOrderCreat
                     </button>
                 </form>
             </div>
+
+            {/* Form customer baru — di luar <form> order supaya tidak bersarang */}
+            <QuickCreateCustomerModal
+                isOpen={quickCreateOpen}
+                onClose={() => setQuickCreateOpen(false)}
+                initialName={quickCreateName}
+                onSaved={handleCustomerSaved}
+            />
         </div>
     )
 }

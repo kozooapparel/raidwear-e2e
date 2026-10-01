@@ -1,12 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { InvoiceWithCustomer } from '@/types/database'
 import { deleteInvoice } from '@/lib/actions/invoices'
 import { formatCurrency, formatDateShort } from '@/lib/utils/format'
 import { DEFAULT_DATE_RANGE, DateRangeValue, isDateInRange } from '@/lib/utils/date-range'
-import { DateRangeFilter } from '@/components/ui'
+import { DateRangeFilter, SearchBar, SelectBox, ConfirmDialog, FilterPills } from '@/components/ui'
+import type { SelectOption, FilterPillOption, FilterTone } from '@/components/ui'
+import { StatCard } from '@/components/ui/ds'
 import InvoiceDownloadButton from './InvoiceDownloadButton'
 import InvoicePreviewButton from './InvoicePreviewButton'
 import { toast } from 'sonner'
@@ -17,30 +19,86 @@ interface BrandItem {
     name: string
 }
 
+/** Invoice yang dikirim halaman sudah dilengkapi relasi brand (opsional) */
+type InvoiceRow = InvoiceWithCustomer & { brand?: BrandItem | null }
+
+/** Ambil relasi brand yang menempel pada invoice (bila ada) */
+const brandOf = (invoice: InvoiceWithCustomer): BrandItem | null =>
+    (invoice as InvoiceRow).brand ?? null
+
 interface InvoiceListProps {
     invoices: InvoiceWithCustomer[]
     brands: BrandItem[]
 }
 
+type StatusFilter = 'all' | 'BELUM_LUNAS' | 'SUDAH_LUNAS'
+
+/** Ikon inline mengikuti konvensi repo */
+const Icon = {
+    Pencil: (p: { className?: string }) => (
+        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+        </svg>
+    ),
+    Trash: (p: { className?: string }) => (
+        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+        </svg>
+    ),
+}
+
+const STATUS_FILTERS: { value: StatusFilter; label: string; tone: FilterTone }[] = [
+    { value: 'all', label: 'Semua', tone: 'neutral' },
+    { value: 'BELUM_LUNAS', label: 'Belum Lunas', tone: 'warning' },
+    { value: 'SUDAH_LUNAS', label: 'Lunas', tone: 'success' },
+]
+
+const ITEMS_PER_PAGE = 20
+
 export default function InvoiceList({ invoices: initialInvoices, brands }: InvoiceListProps) {
     const [invoices, setInvoices] = useState<InvoiceWithCustomer[]>(initialInvoices)
-    const [loading, setLoading] = useState<string | null>(null)
-    const [filter, setFilter] = useState<'all' | 'BELUM_LUNAS' | 'SUDAH_LUNAS'>('all')
+    const [filter, setFilter] = useState<StatusFilter>('all')
     const [search, setSearch] = useState('')
-    const [brandFilter, setBrandFilter] = useState<string>('all')
+    // Dipakai untuk mereset SearchBar (komponen uncontrolled)
+    const [searchKey, setSearchKey] = useState(0)
+    const [brandFilter, setBrandFilter] = useState<string>('')
     const [dateRange, setDateRange] = useState<DateRangeValue>(DEFAULT_DATE_RANGE)
     const [currentPage, setCurrentPage] = useState(1)
-    const ITEMS_PER_PAGE = 20
 
-    const filteredInvoices = invoices.filter(inv => {
-        const matchStatus = filter === 'all' || inv.status_pembayaran === filter
-        const matchSearch = search === '' ||
-            inv.no_invoice.toLowerCase().includes(search.toLowerCase()) ||
-            inv.customer?.name.toLowerCase().includes(search.toLowerCase())
-        const matchBrand = brandFilter === 'all' || (inv as any).brand?.id === brandFilter
-        const matchDate = isDateInRange(inv.tanggal, dateRange)
-        return matchStatus && matchSearch && matchBrand && matchDate
-    })
+    // Konfirmasi hapus
+    const [deleteTarget, setDeleteTarget] = useState<InvoiceWithCustomer | null>(null)
+    const [deleting, setDeleting] = useState(false)
+
+    const brandOptions = useMemo<SelectOption[]>(
+        () => brands.map((brand) => ({ value: brand.id, label: brand.name, meta: brand.code })),
+        [brands]
+    )
+
+    // Daftar setelah filter selain status — dipakai untuk hitung jumlah per pill
+    const baseInvoices = useMemo(() => {
+        const q = search.trim().toLowerCase()
+        return invoices.filter((inv) => {
+            const matchSearch = q === '' ||
+                inv.no_invoice.toLowerCase().includes(q) ||
+                (inv.customer?.name ?? '').toLowerCase().includes(q)
+            const matchBrand = brandFilter === '' || brandOf(inv)?.id === brandFilter
+            return matchSearch && matchBrand && isDateInRange(inv.tanggal, dateRange)
+        })
+    }, [invoices, search, brandFilter, dateRange])
+
+    const filteredInvoices = useMemo(
+        () => baseInvoices.filter((inv) => filter === 'all' || inv.status_pembayaran === filter),
+        [baseInvoices, filter]
+    )
+
+    const statusFilterOptions = useMemo<FilterPillOption<StatusFilter>[]>(() => {
+        const counts: Record<StatusFilter, number> = {
+            all: baseInvoices.length,
+            BELUM_LUNAS: baseInvoices.filter((inv) => inv.status_pembayaran === 'BELUM_LUNAS').length,
+            SUDAH_LUNAS: baseInvoices.filter((inv) => inv.status_pembayaran === 'SUDAH_LUNAS').length,
+        }
+        return STATUS_FILTERS.map((f) => ({ ...f, count: counts[f.value] }))
+    }, [baseInvoices])
 
     const totalPages = Math.ceil(filteredInvoices.length / ITEMS_PER_PAGE)
     const paginatedInvoices = filteredInvoices.slice(
@@ -48,8 +106,8 @@ export default function InvoiceList({ invoices: initialInvoices, brands }: Invoi
         currentPage * ITEMS_PER_PAGE
     )
 
-    // Reset page when filters change
-    const handleFilterChange = (newFilter: typeof filter) => {
+    // Reset halaman saat filter berubah
+    const handleFilterChange = (newFilter: StatusFilter) => {
         setFilter(newFilter)
         setCurrentPage(1)
     }
@@ -66,215 +124,173 @@ export default function InvoiceList({ invoices: initialInvoices, brands }: Invoi
         setCurrentPage(1)
     }
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Hapus invoice ini? Semua data terkait akan dihapus.')) return
+    const hasActiveFilter = search.trim() !== '' || filter !== 'all' || brandFilter !== '' || dateRange !== DEFAULT_DATE_RANGE
 
-        setLoading(id)
+    const resetFilters = () => {
+        setSearch('')
+        setFilter('all')
+        setBrandFilter('')
+        setDateRange(DEFAULT_DATE_RANGE)
+        setCurrentPage(1)
+        setSearchKey((key) => key + 1)
+    }
+
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        const target = deleteTarget
+        setDeleting(true)
         try {
-            await deleteInvoice(id)
-            setInvoices((current) => current.filter((inv) => inv.id !== id))
+            await deleteInvoice(target.id)
+            setInvoices((current) => current.filter((inv) => inv.id !== target.id))
+            toast.success(`Invoice ${target.no_invoice} berhasil dihapus`)
+            setDeleteTarget(null)
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Gagal menghapus invoice')
         } finally {
-            setLoading(null)
+            setDeleting(false)
         }
     }
 
-    // Calculate summaries
+    // Ringkasan sesuai filter yang sedang aktif
     const totalInvoice = filteredInvoices.reduce((sum, inv) => sum + inv.total, 0)
     const totalDibayar = filteredInvoices.reduce((sum, inv) => sum + inv.total_dibayar, 0)
     const totalSisa = filteredInvoices.reduce((sum, inv) => sum + inv.sisa_tagihan, 0)
 
     return (
         <div className="space-y-6">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Invoice</p>
-                    <p className="text-2xl font-bold text-slate-900">{formatCurrency(totalInvoice)}</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Dibayar</p>
-                    <p className="text-2xl font-bold text-emerald-600">{formatCurrency(totalDibayar)}</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                    <p className="text-sm text-slate-500">Sisa Tagihan</p>
-                    <p className="text-2xl font-bold text-orange-500">{formatCurrency(totalSisa)}</p>
-                </div>
+            {/* Ringkasan */}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3 md:gap-4">
+                <StatCard label="Total Invoice" value={formatCurrency(totalInvoice)} tone="default" />
+                <StatCard label="Total Dibayar" value={formatCurrency(totalDibayar)} tone="success" />
+                <StatCard label="Sisa Tagihan" value={formatCurrency(totalSisa)} tone="warning" />
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <div className="flex-1">
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => handleSearchChange(e.target.value)}
-                        placeholder="Cari no invoice atau customer..."
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            {/* Toolbar: pencarian, filter status, brand, rentang tanggal */}
+            <div className="surface space-y-3 p-3 md:p-4">
+                <div className="flex flex-col gap-3 md:flex-row">
+                    <div className="min-w-0 flex-1">
+                        <SearchBar
+                            key={searchKey}
+                            onSearch={handleSearchChange}
+                            placeholder="Cari no invoice atau customer..."
+                        />
+                    </div>
+                    <div className="w-full shrink-0 md:w-60">
+                        <SelectBox
+                            options={brandOptions}
+                            value={brandFilter}
+                            onChange={handleBrandChange}
+                            clearable
+                            clearLabel="Semua Brand"
+                            placeholder="Semua Brand"
+                            ariaLabel="Filter brand"
+                        />
+                    </div>
+                    <DateRangeFilter
+                        value={dateRange}
+                        onChange={handleDateRangeChange}
+                        accent="orange"
+                        align="right"
+                        className="shrink-0"
                     />
                 </div>
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
-                    <button
-                        onClick={() => handleFilterChange('all')}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${filter === 'all'
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                    >
-                        Semua
-                    </button>
-                    <button
-                        onClick={() => handleFilterChange('BELUM_LUNAS')}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${filter === 'BELUM_LUNAS'
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-orange-50 text-orange-600 hover:bg-orange-100'
-                            }`}
-                    >
-                        Belum Lunas
-                    </button>
-                    <button
-                        onClick={() => handleFilterChange('SUDAH_LUNAS')}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${filter === 'SUDAH_LUNAS'
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                            }`}
-                    >
-                        Lunas
-                    </button>
-
-                    {/* Brand Filter Dropdown */}
-                    <div className="relative flex items-center">
-                        <svg
-                            className={`absolute left-2.5 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-500'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
-                        </svg>
-                        <select
-                            value={brandFilter}
-                            onChange={(e) => handleBrandChange(e.target.value)}
-                            className={`pl-8 pr-8 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition-all appearance-none cursor-pointer ${brandFilter !== 'all'
-                                ? 'bg-slate-700 text-white border-slate-700 font-semibold'
-                                : 'bg-white text-slate-700 border-slate-200'
-                                }`}
-                        >
-                            <option value="all" className="bg-white text-slate-700">Semua Brand</option>
-                            {brands.map(brand => (
-                                <option key={brand.id} value={brand.id} className="bg-white text-slate-700">
-                                    {brand.name}
-                                </option>
-                            ))}
-                        </select>
-                        <svg
-                            className={`absolute right-2 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-400'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <FilterPills
+                        options={statusFilterOptions}
+                        value={filter}
+                        onChange={handleFilterChange}
+                        size="sm"
+                        ariaLabel="Filter status pembayaran"
+                    />
+                    <span className="ml-auto text-xs text-slate-500">
+                        Menampilkan <span className="font-semibold text-slate-700">{filteredInvoices.length}</span> dari {invoices.length} invoice
+                    </span>
                 </div>
-
-                {/* Date Range Filter */}
-                <DateRangeFilter
-                    value={dateRange}
-                    onChange={handleDateRangeChange}
-                    accent="orange"
-                    align="right"
-                    className="shrink-0"
-                />
             </div>
 
-            {/* Table */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Tabel */}
+            <div className="surface overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-orange-600 text-white">
-                            <tr>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">No Invoice</th>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">Tanggal</th>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">Customer</th>
-                                <th className="text-right text-xs font-medium uppercase tracking-wider px-6 py-3">Total</th>
-                                <th className="text-right text-xs font-medium uppercase tracking-wider px-6 py-3">Dibayar</th>
-                                <th className="text-right text-xs font-medium uppercase tracking-wider px-6 py-3">Sisa</th>
-                                <th className="text-center text-xs font-medium uppercase tracking-wider px-6 py-3">Status</th>
-                                <th className="text-center text-xs font-medium uppercase tracking-wider px-6 py-3">Aksi</th>
+                        <thead>
+                            <tr className="bg-slate-50/80 border-b border-slate-200/70">
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">No Invoice</th>
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Tanggal</th>
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Customer</th>
+                                <th className="text-right text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Total</th>
+                                <th className="text-right text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Dibayar</th>
+                                <th className="text-right text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Sisa</th>
+                                <th className="text-center text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Status</th>
+                                <th className="text-right text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredInvoices.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
-                                        Tidak ada invoice ditemukan
+                                    <td colSpan={8} className="px-6 py-16 text-center">
+                                        <p className="text-sm text-slate-500">Tidak ada invoice ditemukan</p>
+                                        {hasActiveFilter && (
+                                            <button type="button" onClick={resetFilters} className="btn btn-secondary btn-sm mt-3">
+                                                Reset Filter
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ) : (
                                 paginatedInvoices.map((invoice) => (
-                                    <tr key={invoice.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                                            <Link href={`/invoices/${invoice.id}`} className="hover:text-orange-500">
+                                    <tr key={invoice.id} className="hover:bg-slate-50/60 transition-colors">
+                                        <td className="px-4 py-3 text-sm font-medium text-slate-900">
+                                            <Link href={`/invoices/${invoice.id}`} className="hover:text-brand-600 transition-colors text-mono">
                                                 {invoice.no_invoice}
                                             </Link>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                        <td className="px-4 py-3 text-sm text-slate-600">
                                             {formatDateShort(invoice.tanggal)}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-900">
+                                        <td className="px-4 py-3 text-sm text-slate-900">
                                             <div className="flex items-center gap-2">
-                                                {invoice.customer?.name || '-'}
-                                                {(invoice as any).brand?.code && (
-                                                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
-                                                        {(invoice as any).brand.code}
+                                                <span>{invoice.customer?.name || '-'}</span>
+                                                {brandOf(invoice)?.code && (
+                                                    <span className="badge badge-neutral text-mono">
+                                                        {brandOf(invoice)?.code}
                                                     </span>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-900 text-right font-medium">
+                                        <td className="px-4 py-3 text-sm text-right font-medium text-slate-900 text-mono">
                                             {formatCurrency(invoice.total)}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-emerald-600 text-right">
+                                        <td className="px-4 py-3 text-sm text-right text-emerald-600 text-mono">
                                             {formatCurrency(invoice.total_dibayar)}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-orange-500 text-right font-medium">
+                                        <td className="px-4 py-3 text-sm text-right font-medium text-amber-600 text-mono">
                                             {formatCurrency(invoice.sisa_tagihan)}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${invoice.status_pembayaran === 'SUDAH_LUNAS'
-                                                ? 'bg-emerald-100 text-emerald-800'
-                                                : 'bg-orange-100 text-orange-800'
-                                                }`}>
-                                                {invoice.status_pembayaran === 'SUDAH_LUNAS' ? '🟢 LUNAS' : '🟠 BELUM LUNAS'}
+                                        <td className="px-4 py-3 text-center">
+                                            <span className={`badge ${invoice.status_pembayaran === 'SUDAH_LUNAS' ? 'badge-success' : 'badge-warning'}`}>
+                                                {invoice.status_pembayaran === 'SUDAH_LUNAS' ? 'Lunas' : 'Belum Lunas'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="flex items-center justify-center gap-2">
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center justify-end gap-1">
                                                 <InvoicePreviewButton invoiceId={invoice.id} />
-                                                <InvoiceDownloadButton
-                                                    invoiceId={invoice.id}
-                                                    variant="icon"
-                                                />
+                                                <InvoiceDownloadButton invoiceId={invoice.id} variant="icon" />
                                                 <Link
                                                     href={`/invoices/${invoice.id}`}
-                                                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                                    className="btn-icon btn-ghost"
                                                     title="Lihat/Edit"
+                                                    aria-label={`Lihat atau edit invoice ${invoice.no_invoice}`}
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                    </svg>
+                                                    <Icon.Pencil className="w-4 h-4" />
                                                 </Link>
                                                 <button
-                                                    onClick={() => handleDelete(invoice.id)}
-                                                    disabled={loading === invoice.id}
-                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                                    type="button"
+                                                    onClick={() => setDeleteTarget(invoice)}
+                                                    className="btn-icon btn-ghost text-red-600 hover:!bg-red-50"
                                                     title="Hapus"
+                                                    aria-label={`Hapus invoice ${invoice.no_invoice}`}
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
+                                                    <Icon.Trash className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         </td>
@@ -294,6 +310,7 @@ export default function InvoiceList({ invoices: initialInvoices, brands }: Invoi
                     </p>
                     <div className="flex items-center gap-1">
                         <button
+                            type="button"
                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                             disabled={currentPage === 1}
                             className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -302,10 +319,11 @@ export default function InvoiceList({ invoices: initialInvoices, brands }: Invoi
                         </button>
                         {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                             <button
+                                type="button"
                                 key={page}
                                 onClick={() => setCurrentPage(page)}
                                 className={`w-8 h-8 text-sm rounded-lg transition-colors ${page === currentPage
-                                    ? 'bg-orange-500 text-white font-semibold'
+                                    ? 'bg-brand-600 text-white font-semibold'
                                     : 'hover:bg-slate-100 text-slate-600'
                                     }`}
                             >
@@ -313,6 +331,7 @@ export default function InvoiceList({ invoices: initialInvoices, brands }: Invoi
                             </button>
                         ))}
                         <button
+                            type="button"
                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                             disabled={currentPage === totalPages}
                             className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -322,6 +341,19 @@ export default function InvoiceList({ invoices: initialInvoices, brands }: Invoi
                     </div>
                 </div>
             )}
+
+            {/* Konfirmasi hapus */}
+            <ConfirmDialog
+                isOpen={deleteTarget !== null}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleDelete}
+                title="Hapus Invoice"
+                description={deleteTarget ? `Yakin ingin menghapus invoice ${deleteTarget.no_invoice}? Semua data terkait akan dihapus dan tindakan ini tidak bisa dibatalkan.` : ''}
+                confirmText="Hapus Invoice"
+                tone="danger"
+                loading={deleting}
+                icon={<Icon.Trash className="w-6 h-6" />}
+            />
         </div>
     )
 }

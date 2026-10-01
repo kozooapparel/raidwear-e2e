@@ -8,7 +8,8 @@ import { toast } from 'sonner'
 import BonusModal from './BonusModal'
 import EditEmployeeModal from './EditEmployeeModal'
 import EditAllowanceModal from './EditAllowanceModal'
-import { CurrencyInput } from '@/components/ui'
+import { CurrencyInput, SelectBox, ConfirmDialog } from '@/components/ui'
+import { PageHeader } from '@/components/ui/ds'
 
 interface Employee {
     id: string
@@ -59,6 +60,18 @@ interface AttendanceSummary {
     totalOvertimeHours: number
 }
 
+const ALLOWANCE_TYPE_OPTIONS = [
+    { value: 'transport', label: 'Transport' },
+    { value: 'meal', label: 'Makan' },
+    { value: 'position', label: 'Jabatan' },
+    { value: 'other', label: 'Lainnya' },
+]
+
+const CALCULATION_METHOD_OPTIONS = [
+    { value: 'per_day', label: 'Per Hari' },
+    { value: 'per_month', label: 'Per Bulan' },
+]
+
 export default function EmployeeDetailClient({
     employee,
     attendanceSummary
@@ -70,6 +83,14 @@ export default function EmployeeDetailClient({
     const [showAllowanceForm, setShowAllowanceForm] = useState(false)
     const [showKasbonForm, setShowKasbonForm] = useState(false)
     const [loading, setLoading] = useState(false)
+
+    // Nilai form tunjangan (SelectBox tidak ikut terkirim lewat FormData)
+    const [allowanceType, setAllowanceType] = useState('transport')
+    const [calculationMethod, setCalculationMethod] = useState('per_day')
+
+    // Konfirmasi hapus: satu state untuk tunjangan & kasbon
+    const [pendingDelete, setPendingDelete] = useState<{ id: string; type: 'allowance' | 'kasbon' } | null>(null)
+    const [processing, setProcessing] = useState(false)
 
     // New modal states
     const [showBonusModal, setShowBonusModal] = useState(false)
@@ -111,17 +132,32 @@ export default function EmployeeDetailClient({
         setLoading(false)
     }
 
-    const handleDeleteAllowance = async (allowanceId: string) => {
-        if (!confirm('Hapus tunjangan ini?')) return
+    const runDelete = async () => {
+        if (!pendingDelete) return
+        setProcessing(true)
 
-        const result = await deleteAllowance(allowanceId, employee.id)
+        if (pendingDelete.type === 'allowance') {
+            const result = await deleteAllowance(pendingDelete.id, employee.id)
 
-        if (result.success) {
-            toast.success('Tunjangan berhasil dihapus!')
-            router.refresh()
+            if (result.success) {
+                toast.success('Tunjangan berhasil dihapus!')
+                router.refresh()
+            } else {
+                toast.error(result.error || 'Gagal menghapus tunjangan')
+            }
         } else {
-            toast.error(result.error || 'Gagal menghapus tunjangan')
+            const result = await deleteDeduction(pendingDelete.id, employee.id)
+
+            if (result.success) {
+                toast.success('Kasbon berhasil dihapus!')
+                router.refresh()
+            } else {
+                toast.error(result.error || 'Gagal menghapus kasbon')
+            }
         }
+
+        setProcessing(false)
+        setPendingDelete(null)
     }
 
     const handleAddKasbon = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -140,19 +176,6 @@ export default function EmployeeDetailClient({
         }
 
         setLoading(false)
-    }
-
-    const handleDeleteKasbon = async (kasbonId: string) => {
-        if (!confirm('Hapus kasbon ini? Hanya bisa dihapus jika belum terpotong.')) return
-
-        const result = await deleteDeduction(kasbonId, employee.id)
-
-        if (result.success) {
-            toast.success('Kasbon berhasil dihapus!')
-            router.refresh()
-        } else {
-            toast.error(result.error || 'Gagal menghapus kasbon')
-        }
     }
 
     const activeAllowances = employee.allowances?.filter(a => a.is_active) || []
@@ -200,26 +223,21 @@ export default function EmployeeDetailClient({
                             </svg>
                             Kembali ke Daftar Karyawan
                         </Link>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-2xl font-bold text-white">
-                                    {employee.full_name.charAt(0).toUpperCase()}
-                                </div>
-                                <div>
-                                    <h1 className="text-3xl font-bold text-slate-900">{employee.full_name}</h1>
-                                    <p className="text-slate-500">{employee.nik} • {employee.position} • {employee.department}</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowEditEmployeeModal(true)}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-                            >
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                Edit Karyawan
-                            </button>
-                        </div>
+                        <PageHeader
+                            title={employee.full_name}
+                            description={`${employee.nik} • ${employee.position} • ${employee.department}`}
+                            actions={
+                                <button
+                                    onClick={() => setShowEditEmployeeModal(true)}
+                                    className="btn-primary"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    Edit Karyawan
+                                </button>
+                            }
+                        />
                     </div>
 
                     {/* Stats Grid */}
@@ -275,7 +293,7 @@ export default function EmployeeDetailClient({
                                     setEditingBonus(undefined)
                                     setShowBonusModal(true)
                                 }}
-                                className="px-4 py-2 rounded-lg bg-purple-500 text-white text-sm font-medium hover:bg-purple-600 transition-colors"
+                                className="btn-primary btn-sm"
                             >
                                 + Tambah Bonus
                             </button>
@@ -301,7 +319,7 @@ export default function EmployeeDetailClient({
                                                             setEditingBonus(bonus)
                                                             setShowBonusModal(true)
                                                         }}
-                                                        className="p-2 rounded-lg text-purple-600 hover:bg-purple-50 transition-colors"
+                                                        className="btn-icon btn-ghost text-brand-600 hover:bg-brand-50"
                                                         title="Edit"
                                                     >
                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -343,45 +361,46 @@ export default function EmployeeDetailClient({
                             <h2 className="text-xl font-semibold text-slate-900">Tunjangan</h2>
                             <button
                                 onClick={() => setShowAllowanceForm(!showAllowanceForm)}
-                                className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-600 transition-colors"
+                                className="btn-primary btn-sm"
                             >
                                 {showAllowanceForm ? 'Tutup' : '+ Tambah Tunjangan'}
                             </button>
                         </div>
 
                         {showAllowanceForm && (
-                            <form onSubmit={handleAddAllowance} className="mb-4 p-4 rounded-lg bg-blue-50 border border-blue-200 space-y-3">
+                            <form onSubmit={handleAddAllowance} className="mb-4 p-4 rounded-lg bg-brand-50 border border-brand-200 space-y-3">
                                 <div className="grid grid-cols-3 gap-3">
-                                    <select
-                                        name="type"
-                                        required
-                                        className="px-3 py-2 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
-                                    >
-                                        <option value="transport">Transport</option>
-                                        <option value="meal">Makan</option>
-                                        <option value="position">Jabatan</option>
-                                        <option value="other">Lainnya</option>
-                                    </select>
+                                    <SelectBox
+                                        options={ALLOWANCE_TYPE_OPTIONS}
+                                        value={allowanceType}
+                                        onChange={setAllowanceType}
+                                        searchable={false}
+                                        size="sm"
+                                        ariaLabel="Jenis tunjangan"
+                                    />
+                                    {/* SelectBox tidak ikut terkirim lewat FormData, nilainya dikirim via hidden input */}
+                                    <input type="hidden" name="type" value={allowanceType} />
                                     <CurrencyInput
                                         name="amount"
                                         required
                                         min={0}
                                         placeholder="Nominal (Rp)"
-                                        className="!px-3 !py-2 !rounded-lg !bg-white !border-slate-300 focus:!border-blue-500 focus:!ring-2 focus:!ring-blue-200"
+                                        className="!px-3 !py-2 !rounded-lg !bg-white !border-slate-300 focus:!border-brand-500 focus:!ring-2 focus:!ring-brand-500/15"
                                     />
-                                    <select
-                                        name="calculation_method"
-                                        required
-                                        className="px-3 py-2 rounded-lg border border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
-                                    >
-                                        <option value="per_day">Per Hari</option>
-                                        <option value="per_month">Per Bulan</option>
-                                    </select>
+                                    <SelectBox
+                                        options={CALCULATION_METHOD_OPTIONS}
+                                        value={calculationMethod}
+                                        onChange={setCalculationMethod}
+                                        searchable={false}
+                                        size="sm"
+                                        ariaLabel="Metode perhitungan"
+                                    />
+                                    <input type="hidden" name="calculation_method" value={calculationMethod} />
                                 </div>
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                    className="w-full btn-primary"
                                 >
                                     {loading ? 'Menyimpan...' : 'Simpan Tunjangan'}
                                 </button>
@@ -401,7 +420,7 @@ export default function EmployeeDetailClient({
                                         <div className="flex items-center gap-2">
                                             <button
                                                 onClick={() => setEditingAllowance(allowance)}
-                                                className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                                                className="btn-icon btn-ghost text-brand-600 hover:bg-brand-50"
                                                 title="Edit"
                                             >
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -409,8 +428,8 @@ export default function EmployeeDetailClient({
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => handleDeleteAllowance(allowance.id)}
-                                                className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                                                onClick={() => setPendingDelete({ id: allowance.id, type: 'allowance' })}
+                                                className="btn-icon btn-ghost text-red-600 hover:bg-red-50"
                                                 title="Hapus"
                                             >
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -432,7 +451,7 @@ export default function EmployeeDetailClient({
                             <h2 className="text-xl font-semibold text-slate-900">Kasbon</h2>
                             <button
                                 onClick={() => setShowKasbonForm(!showKasbonForm)}
-                                className="px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
+                                className="btn-primary btn-sm"
                             >
                                 {showKasbonForm ? 'Tutup' : '+ Tambah Kasbon'}
                             </button>
@@ -471,7 +490,7 @@ export default function EmployeeDetailClient({
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="w-full px-4 py-2 rounded-lg bg-amber-600 text-white font-medium hover:bg-amber-700 transition-colors disabled:opacity-50"
+                                    className="w-full btn-primary"
                                 >
                                     {loading ? 'Menyimpan...' : 'Simpan Kasbon'}
                                 </button>
@@ -503,8 +522,8 @@ export default function EmployeeDetailClient({
                                                     </div>
                                                     {canDelete && (
                                                         <button
-                                                            onClick={() => handleDeleteKasbon(deduction.id)}
-                                                            className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                                                            onClick={() => setPendingDelete({ id: deduction.id, type: 'kasbon' })}
+                                                            className="btn-icon btn-ghost text-red-600 hover:bg-red-50"
                                                             title="Hapus kasbon (belum terpotong)"
                                                         >
                                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -533,6 +552,20 @@ export default function EmployeeDetailClient({
                     </div>
                 </div>
             </div>
+
+            {/* Konfirmasi hapus tunjangan / kasbon */}
+            <ConfirmDialog
+                isOpen={pendingDelete !== null}
+                onClose={() => { if (!processing) setPendingDelete(null) }}
+                onConfirm={runDelete}
+                title={pendingDelete?.type === 'kasbon' ? 'Hapus kasbon ini?' : 'Hapus tunjangan ini?'}
+                description={pendingDelete?.type === 'kasbon'
+                    ? 'Hanya bisa dihapus jika belum terpotong.'
+                    : 'Tindakan ini tidak bisa dibatalkan.'}
+                confirmText="Hapus"
+                tone="danger"
+                loading={processing}
+            />
         </>
     )
 }

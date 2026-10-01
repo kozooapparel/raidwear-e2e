@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { KuitansiWithInvoice } from '@/types/database'
 import { deleteKuitansi } from '@/lib/actions/kuitansi'
 import { formatCurrency, formatDateShort } from '@/lib/utils/format'
 import { DEFAULT_DATE_RANGE, DateRangeValue, isDateInRange } from '@/lib/utils/date-range'
-import { DateRangeFilter } from '@/components/ui'
+import { DateRangeFilter, SearchBar, SelectBox, ConfirmDialog, FilterPills } from '@/components/ui'
+import type { SelectOption, FilterPillOption, FilterTone } from '@/components/ui'
 import KuitansiDownloadButton from './KuitansiDownloadButton'
 import KuitansiPreviewButton from './KuitansiPreviewButton'
 import { toast } from 'sonner'
@@ -21,25 +22,69 @@ interface KuitansiListProps {
     brands: BrandItem[]
 }
 
+type StatusFilter = 'all' | 'BELUM_LUNAS' | 'SUDAH_LUNAS'
+
+/** Ikon inline mengikuti konvensi repo */
+const Icon = {
+    Trash: (p: { className?: string }) => (
+        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+        </svg>
+    ),
+}
+
+const STATUS_FILTERS: { value: StatusFilter; label: string; tone: FilterTone }[] = [
+    { value: 'all', label: 'Semua', tone: 'neutral' },
+    { value: 'BELUM_LUNAS', label: 'Inv. Belum Lunas', tone: 'warning' },
+    { value: 'SUDAH_LUNAS', label: 'Inv. Lunas', tone: 'success' },
+]
+
+const ITEMS_PER_PAGE = 20
+
 export default function KuitansiList({ kuitansiList: initialKuitansi, brands }: KuitansiListProps) {
     const [kuitansiList, setKuitansiList] = useState<KuitansiWithInvoice[]>(initialKuitansi)
-    const [loading, setLoading] = useState<string | null>(null)
     const [search, setSearch] = useState('')
-    const [brandFilter, setBrandFilter] = useState<string>('all')
-    const [statusFilter, setStatusFilter] = useState<'all' | 'BELUM_LUNAS' | 'SUDAH_LUNAS'>('all')
+    // Dipakai untuk mereset SearchBar (komponen uncontrolled)
+    const [searchKey, setSearchKey] = useState(0)
+    const [brandFilter, setBrandFilter] = useState<string>('')
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
     const [dateRange, setDateRange] = useState<DateRangeValue>(DEFAULT_DATE_RANGE)
     const [currentPage, setCurrentPage] = useState(1)
-    const ITEMS_PER_PAGE = 20
 
-    const filteredList = kuitansiList.filter(k => {
-        const matchSearch = search === '' ||
-            k.invoice?.no_invoice.toLowerCase().includes(search.toLowerCase()) ||
-            k.invoice?.customer?.name.toLowerCase().includes(search.toLowerCase())
-        const matchBrand = brandFilter === 'all' || (k.invoice as any)?.brand?.id === brandFilter
-        const matchStatus = statusFilter === 'all' || k.invoice?.status_pembayaran === statusFilter
-        const matchDate = isDateInRange(k.tanggal, dateRange)
-        return matchSearch && matchBrand && matchStatus && matchDate
-    })
+    // Konfirmasi hapus
+    const [deleteTarget, setDeleteTarget] = useState<KuitansiWithInvoice | null>(null)
+    const [deleting, setDeleting] = useState(false)
+
+    const brandOptions = useMemo<SelectOption[]>(
+        () => brands.map((brand) => ({ value: brand.id, label: brand.name, meta: brand.code })),
+        [brands]
+    )
+
+    // Daftar setelah filter selain status — dipakai untuk hitung jumlah per pill
+    const baseList = useMemo(() => {
+        const q = search.trim().toLowerCase()
+        return kuitansiList.filter((k) => {
+            const matchSearch = q === '' ||
+                (k.invoice?.no_invoice ?? '').toLowerCase().includes(q) ||
+                (k.invoice?.customer?.name ?? '').toLowerCase().includes(q)
+            const matchBrand = brandFilter === '' || k.invoice?.brand?.id === brandFilter
+            return matchSearch && matchBrand && isDateInRange(k.tanggal, dateRange)
+        })
+    }, [kuitansiList, search, brandFilter, dateRange])
+
+    const filteredList = useMemo(
+        () => baseList.filter((k) => statusFilter === 'all' || k.invoice?.status_pembayaran === statusFilter),
+        [baseList, statusFilter]
+    )
+
+    const statusFilterOptions = useMemo<FilterPillOption<StatusFilter>[]>(() => {
+        const counts: Record<StatusFilter, number> = {
+            all: baseList.length,
+            BELUM_LUNAS: baseList.filter((k) => k.invoice?.status_pembayaran === 'BELUM_LUNAS').length,
+            SUDAH_LUNAS: baseList.filter((k) => k.invoice?.status_pembayaran === 'SUDAH_LUNAS').length,
+        }
+        return STATUS_FILTERS.map((f) => ({ ...f, count: counts[f.value] }))
+    }, [baseList])
 
     const totalPages = Math.ceil(filteredList.length / ITEMS_PER_PAGE)
     const paginatedList = filteredList.slice(
@@ -47,184 +92,174 @@ export default function KuitansiList({ kuitansiList: initialKuitansi, brands }: 
         currentPage * ITEMS_PER_PAGE
     )
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Hapus kuitansi ini? Status pembayaran invoice akan diupdate.')) return
+    const handleSearchChange = (value: string) => {
+        setSearch(value)
+        setCurrentPage(1)
+    }
+    const handleBrandChange = (value: string) => {
+        setBrandFilter(value)
+        setCurrentPage(1)
+    }
+    const handleStatusChange = (value: StatusFilter) => {
+        setStatusFilter(value)
+        setCurrentPage(1)
+    }
+    const handleDateRangeChange = (range: DateRangeValue) => {
+        setDateRange(range)
+        setCurrentPage(1)
+    }
 
-        setLoading(id)
+    const hasActiveFilter = search.trim() !== '' || statusFilter !== 'all' || brandFilter !== '' || dateRange !== DEFAULT_DATE_RANGE
+
+    const resetFilters = () => {
+        setSearch('')
+        setStatusFilter('all')
+        setBrandFilter('')
+        setDateRange(DEFAULT_DATE_RANGE)
+        setCurrentPage(1)
+        setSearchKey((key) => key + 1)
+    }
+
+    const handleDelete = async () => {
+        if (!deleteTarget) return
+        const target = deleteTarget
+        setDeleting(true)
         try {
-            await deleteKuitansi(id)
-            setKuitansiList((current) => current.filter((k) => k.id !== id))
+            await deleteKuitansi(target.id)
+            setKuitansiList((current) => current.filter((k) => k.id !== target.id))
+            toast.success('Kuitansi berhasil dihapus')
+            setDeleteTarget(null)
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Gagal menghapus kuitansi')
         } finally {
-            setLoading(null)
+            setDeleting(false)
         }
     }
 
-    // Calculate total
+    // Total pembayaran sesuai filter yang sedang aktif
     const totalPembayaran = filteredList.reduce((sum, k) => sum + k.jumlah, 0)
 
     return (
         <div className="space-y-6">
-            {/* Summary Card */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 p-6 rounded-xl text-white">
-                <p className="text-sm text-emerald-100">Total Pembayaran</p>
-                <p className="text-3xl font-bold">{formatCurrency(totalPembayaran)}</p>
-                <p className="text-sm text-emerald-100 mt-1">{filteredList.length} kuitansi</p>
-            </div>
-
-            {/* Search & Filters */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
-                    placeholder="Cari no invoice atau customer..."
-                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                />
-
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 -mb-1">
-                    {/* Status Filter */}
-                    <button
-                        onClick={() => { setStatusFilter('all'); setCurrentPage(1) }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${statusFilter === 'all'
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                    >
-                        Semua
-                    </button>
-                    <button
-                        onClick={() => { setStatusFilter('BELUM_LUNAS'); setCurrentPage(1) }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${statusFilter === 'BELUM_LUNAS'
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-orange-50 text-orange-600 hover:bg-orange-100'
-                            }`}
-                    >
-                        Inv. Belum Lunas
-                    </button>
-                    <button
-                        onClick={() => { setStatusFilter('SUDAH_LUNAS'); setCurrentPage(1) }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${statusFilter === 'SUDAH_LUNAS'
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                            }`}
-                    >
-                        Inv. Lunas
-                    </button>
-
-                    {/* Brand Filter Dropdown */}
-                    <div className="relative flex items-center">
-                        <svg
-                            className={`absolute left-2.5 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-500'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
-                        </svg>
-                        <select
-                            value={brandFilter}
-                            onChange={(e) => { setBrandFilter(e.target.value); setCurrentPage(1) }}
-                            className={`pl-8 pr-8 py-2 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400 transition-all appearance-none cursor-pointer ${brandFilter !== 'all'
-                                ? 'bg-slate-700 text-white border-slate-700 font-semibold'
-                                : 'bg-white text-slate-700 border-slate-200'
-                                }`}
-                        >
-                            <option value="all" className="bg-white text-slate-700">Semua Brand</option>
-                            {brands.map(brand => (
-                                <option key={brand.id} value={brand.id} className="bg-white text-slate-700">
-                                    {brand.name}
-                                </option>
-                            ))}
-                        </select>
-                        <svg
-                            className={`absolute right-2 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-400'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </div>
+            {/* Ringkasan */}
+            <div className="surface flex flex-col gap-1 bg-gradient-to-r from-brand-600 to-brand-700 p-5 text-white md:flex-row md:items-center md:justify-between">
+                <div>
+                    <p className="text-sm text-brand-50/90">Total Pembayaran</p>
+                    <p className="text-mono text-3xl font-bold">{formatCurrency(totalPembayaran)}</p>
                 </div>
-
-                {/* Date Range Filter */}
-                <DateRangeFilter
-                    value={dateRange}
-                    onChange={(range) => { setDateRange(range); setCurrentPage(1) }}
-                    accent="emerald"
-                    align="right"
-                    className="shrink-0"
-                />
+                <p className="text-sm text-brand-50/90">{filteredList.length} kuitansi</p>
             </div>
 
-            {/* Table */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Toolbar: pencarian, filter status, brand, rentang tanggal */}
+            <div className="surface space-y-3 p-3 md:p-4">
+                <div className="flex flex-col gap-3 md:flex-row">
+                    <div className="min-w-0 flex-1">
+                        <SearchBar
+                            key={searchKey}
+                            onSearch={handleSearchChange}
+                            placeholder="Cari no invoice atau customer..."
+                        />
+                    </div>
+                    <div className="w-full shrink-0 md:w-60">
+                        <SelectBox
+                            options={brandOptions}
+                            value={brandFilter}
+                            onChange={handleBrandChange}
+                            clearable
+                            clearLabel="Semua Brand"
+                            placeholder="Semua Brand"
+                            ariaLabel="Filter brand"
+                        />
+                    </div>
+                    <DateRangeFilter
+                        value={dateRange}
+                        onChange={handleDateRangeChange}
+                        accent="emerald"
+                        align="right"
+                        className="shrink-0"
+                    />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <FilterPills
+                        options={statusFilterOptions}
+                        value={statusFilter}
+                        onChange={handleStatusChange}
+                        size="sm"
+                        ariaLabel="Filter status invoice"
+                    />
+                    <span className="ml-auto text-xs text-slate-500">
+                        Menampilkan <span className="font-semibold text-slate-700">{filteredList.length}</span> dari {kuitansiList.length} kuitansi
+                    </span>
+                </div>
+            </div>
+
+            {/* Tabel */}
+            <div className="surface overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
-                        <thead className="bg-cyan-600 text-white">
-                            <tr>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">No</th>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">Tanggal</th>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">No Invoice</th>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">Customer</th>
-                                <th className="text-right text-xs font-medium uppercase tracking-wider px-6 py-3">Jumlah</th>
-                                <th className="text-left text-xs font-medium uppercase tracking-wider px-6 py-3">Keterangan</th>
-                                <th className="text-center text-xs font-medium uppercase tracking-wider px-6 py-3">Aksi</th>
+                        <thead>
+                            <tr className="bg-slate-50/80 border-b border-slate-200/70">
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">No</th>
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Tanggal</th>
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">No Invoice</th>
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Customer</th>
+                                <th className="text-right text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Jumlah</th>
+                                <th className="text-left text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Keterangan</th>
+                                <th className="text-right text-xs font-semibold uppercase tracking-wider text-slate-500 px-4 py-3">Aksi</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {filteredList.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
-                                        Tidak ada kuitansi ditemukan
+                                    <td colSpan={7} className="px-6 py-16 text-center">
+                                        <p className="text-sm text-slate-500">Tidak ada kuitansi ditemukan</p>
+                                        {hasActiveFilter && (
+                                            <button type="button" onClick={resetFilters} className="btn btn-secondary btn-sm mt-3">
+                                                Reset Filter
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ) : (
                                 paginatedList.map((kuitansi, index) => (
-                                    <tr key={kuitansi.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                    <tr key={kuitansi.id} className="hover:bg-slate-50/60 transition-colors">
+                                        <td className="px-4 py-3 text-sm text-slate-500 text-mono">
                                             {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                        <td className="px-4 py-3 text-sm text-slate-600">
                                             {formatDateShort(kuitansi.tanggal)}
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                                        <td className="px-4 py-3 text-sm font-medium text-slate-900 text-mono">
                                             {kuitansi.invoice?.no_invoice || '-'}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-900">
+                                        <td className="px-4 py-3 text-sm text-slate-900">
                                             <div className="flex items-center gap-2">
-                                                {kuitansi.invoice?.customer?.name || '-'}
-                                                {(kuitansi.invoice as any)?.brand?.code && (
-                                                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 rounded">
-                                                        {(kuitansi.invoice as any).brand.code}
+                                                <span>{kuitansi.invoice?.customer?.name || '-'}</span>
+                                                {kuitansi.invoice?.brand?.code && (
+                                                    <span className="badge badge-neutral text-mono">
+                                                        {kuitansi.invoice.brand.code}
                                                     </span>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-right font-bold text-emerald-600">
+                                        <td className="px-4 py-3 text-sm text-right font-semibold text-emerald-600 text-mono">
                                             {formatCurrency(kuitansi.jumlah)}
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">
+                                        <td className="px-4 py-3 text-sm text-slate-600 max-w-xs truncate">
                                             {kuitansi.keterangan}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <div className="flex items-center justify-center gap-2">
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center justify-end gap-1">
                                                 <KuitansiPreviewButton kuitansiId={kuitansi.id} />
-                                                <KuitansiDownloadButton
-                                                    kuitansiId={kuitansi.id}
-                                                    variant="icon"
-                                                />
+                                                <KuitansiDownloadButton kuitansiId={kuitansi.id} variant="icon" />
                                                 <button
-                                                    onClick={() => handleDelete(kuitansi.id)}
-                                                    disabled={loading === kuitansi.id}
-                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                                    type="button"
+                                                    onClick={() => setDeleteTarget(kuitansi)}
+                                                    className="btn-icon btn-ghost text-red-600 hover:!bg-red-50"
                                                     title="Hapus"
+                                                    aria-label="Hapus kuitansi"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
+                                                    <Icon.Trash className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         </td>
@@ -244,6 +279,7 @@ export default function KuitansiList({ kuitansiList: initialKuitansi, brands }: 
                     </p>
                     <div className="flex items-center gap-1">
                         <button
+                            type="button"
                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                             disabled={currentPage === 1}
                             className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -252,10 +288,11 @@ export default function KuitansiList({ kuitansiList: initialKuitansi, brands }: 
                         </button>
                         {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                             <button
+                                type="button"
                                 key={page}
                                 onClick={() => setCurrentPage(page)}
                                 className={`w-8 h-8 text-sm rounded-lg transition-colors ${page === currentPage
-                                    ? 'bg-emerald-500 text-white font-semibold'
+                                    ? 'bg-emerald-600 text-white font-semibold'
                                     : 'hover:bg-slate-100 text-slate-600'
                                     }`}
                             >
@@ -263,6 +300,7 @@ export default function KuitansiList({ kuitansiList: initialKuitansi, brands }: 
                             </button>
                         ))}
                         <button
+                            type="button"
                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                             disabled={currentPage === totalPages}
                             className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -272,6 +310,19 @@ export default function KuitansiList({ kuitansiList: initialKuitansi, brands }: 
                     </div>
                 </div>
             )}
+
+            {/* Konfirmasi hapus */}
+            <ConfirmDialog
+                isOpen={deleteTarget !== null}
+                onClose={() => setDeleteTarget(null)}
+                onConfirm={handleDelete}
+                title="Hapus Kuitansi"
+                description="Yakin ingin menghapus kuitansi ini? Status pembayaran invoice akan diperbarui dan tindakan ini tidak bisa dibatalkan."
+                confirmText="Hapus Kuitansi"
+                tone="danger"
+                loading={deleting}
+                icon={<Icon.Trash className="w-6 h-6" />}
+            />
         </div>
     )
 }

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateAttendance, deleteAttendance } from '../actions'
 import { toast } from 'sonner'
+import { ConfirmDialog, SelectBox } from '@/components/ui'
+import { PageHeader, EmptyState, DefaultEmptyIcon } from '@/components/ui/ds'
 
 interface AttendanceLog {
     id: string
@@ -27,9 +29,15 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
     const router = useRouter()
     const [editingId, setEditingId] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
+    // Tipe lembur untuk baris yang sedang diedit (SelectBox tidak ikut FormData)
+    const [overtimeType, setOvertimeType] = useState('')
+    // Record absensi yang menunggu konfirmasi hapus
+    const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+    const [processing, setProcessing] = useState(false)
 
-    const handleEdit = (logId: string) => {
-        setEditingId(logId)
+    const handleEdit = (log: AttendanceLog) => {
+        setEditingId(log.id)
+        setOvertimeType(log.overtime_type || '')
     }
 
     const handleSave = async (e: React.FormEvent<HTMLFormElement>, logId: string) => {
@@ -50,11 +58,11 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
         setLoading(false)
     }
 
-    const handleDelete = async (logId: string) => {
-        if (!confirm('Hapus record absensi ini? Tidak bisa dibatalkan!')) return
+    const handleDelete = async () => {
+        if (!pendingDelete) return
 
-        setLoading(true)
-        const result = await deleteAttendance(logId)
+        setProcessing(true)
+        const result = await deleteAttendance(pendingDelete)
 
         if (result.success) {
             toast.success('Absensi berhasil dihapus!')
@@ -63,7 +71,8 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
             toast.error(result.error || 'Gagal hapus absensi')
         }
 
-        setLoading(false)
+        setProcessing(false)
+        setPendingDelete(null)
     }
 
     const formatDate = (date: string) => {
@@ -85,10 +94,10 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900">Koreksi Absensi</h1>
-                <p className="text-slate-500 mt-1">Edit atau hapus record absensi (Owner only)</p>
-            </div>
+            <PageHeader
+                title="Koreksi Absensi"
+                description="Edit atau hapus record absensi (Owner only)"
+            />
 
             <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
                 <h2 className="text-xl font-semibold text-slate-900 mb-4">
@@ -109,7 +118,7 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                                                     name="check_in"
                                                     required
                                                     defaultValue={log.check_in.slice(0, 16)}
-                                                    className="w-full px-2 py-1 text-sm rounded border border-slate-300 focus:border-blue-500 outline-none"
+                                                    className="w-full px-2 py-1 text-sm rounded border border-slate-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 outline-none"
                                                 />
                                             </div>
                                             <div>
@@ -118,26 +127,31 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                                                     type="datetime-local"
                                                     name="check_out"
                                                     defaultValue={log.check_out?.slice(0, 16) || ''}
-                                                    className="w-full px-2 py-1 text-sm rounded border border-slate-300 focus:border-blue-500 outline-none"
+                                                    className="w-full px-2 py-1 text-sm rounded border border-slate-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/15 outline-none"
                                                 />
                                             </div>
                                             <div>
                                                 <label className="block text-xs text-slate-600 mb-1">Overtime Type</label>
-                                                <select
-                                                    name="overtime_type"
-                                                    defaultValue={log.overtime_type || ''}
-                                                    className="w-full px-2 py-1 text-sm rounded border border-slate-300 focus:border-blue-500 outline-none"
-                                                >
-                                                    <option value="">Normal</option>
-                                                    <option value="weekday">Weekday OT</option>
-                                                    <option value="holiday">Holiday</option>
-                                                </select>
+                                                {/* Nilai SelectBox dikirim lewat hidden input agar tetap ikut FormData */}
+                                                <SelectBox
+                                                    options={[
+                                                        { value: '', label: 'Normal' },
+                                                        { value: 'weekday', label: 'Weekday OT' },
+                                                        { value: 'holiday', label: 'Holiday' },
+                                                    ]}
+                                                    value={overtimeType}
+                                                    onChange={setOvertimeType}
+                                                    searchable={false}
+                                                    size="sm"
+                                                    ariaLabel="Tipe lembur"
+                                                />
+                                                <input type="hidden" name="overtime_type" value={overtimeType} />
                                             </div>
                                             <div className="flex items-end gap-2">
                                                 <button
                                                     type="submit"
                                                     disabled={loading}
-                                                    className="flex-1 px-3 py-1 text-sm rounded bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50"
+                                                    className="flex-1 btn-primary btn-sm"
                                                 >
                                                     Simpan
                                                 </button>
@@ -145,7 +159,7 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                                                     type="button"
                                                     onClick={() => setEditingId(null)}
                                                     disabled={loading}
-                                                    className="px-3 py-1 text-sm rounded border border-slate-300 hover:bg-slate-100 disabled:opacity-50"
+                                                    className="btn-secondary btn-sm"
                                                 >
                                                     Batal
                                                 </button>
@@ -172,7 +186,7 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                                                 <p className="text-xs text-slate-500">Jam Pulang</p>
                                                 <p className="font-medium text-slate-900">{formatTime(log.check_out)}</p>
                                                 {log.forgot_checkout && (
-                                                    <span className="text-xs text-blue-600">🤖 Auto</span>
+                                                    <span className="text-xs text-brand-600">🤖 Auto</span>
                                                 )}
                                             </div>
                                             <div>
@@ -187,8 +201,8 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
-                                                onClick={() => handleEdit(log.id)}
-                                                className="p-2 rounded hover:bg-blue-50 text-blue-600 transition-colors"
+                                                onClick={() => handleEdit(log)}
+                                                className="p-2 rounded hover:bg-brand-50 text-brand-600 transition-colors"
                                                 title="Edit"
                                             >
                                                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -196,7 +210,7 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                                                 </svg>
                                             </button>
                                             <button
-                                                onClick={() => handleDelete(log.id)}
+                                                onClick={() => setPendingDelete(log.id)}
                                                 className="p-2 rounded hover:bg-red-50 text-red-600 transition-colors"
                                                 title="Hapus"
                                             >
@@ -211,11 +225,25 @@ export default function CorrectionsList({ logs }: { logs: AttendanceLog[] }) {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-12">
-                        <p className="text-slate-500">Tidak ada record absensi</p>
-                    </div>
+                    <EmptyState
+                        variant="compact"
+                        icon={<DefaultEmptyIcon />}
+                        title="Tidak ada record absensi"
+                    />
                 )}
             </div>
+
+            {/* Konfirmasi hapus record absensi */}
+            <ConfirmDialog
+                isOpen={pendingDelete !== null}
+                onClose={() => { if (!processing) setPendingDelete(null) }}
+                onConfirm={handleDelete}
+                title="Hapus record absensi ini?"
+                description="Tindakan ini tidak bisa dibatalkan."
+                confirmText="Hapus"
+                tone="danger"
+                loading={processing}
+            />
         </div>
     )
 }

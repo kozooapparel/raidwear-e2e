@@ -5,8 +5,8 @@ import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, closestCorners, 
 import { Order, Customer, DashboardMetrics, STAGES_ORDER, STAGE_LABELS, OrderStage, GATEKEEPER_STAGES, STAGE_BOTTLENECK_DAYS, OrderWithCustomer } from '@/types/database'
 import DroppableColumn from './DroppableColumn'
 import MetricsBar from './MetricsBar'
-import SearchBar from '../ui/SearchBar'
-import OrderStatusFilter, { OrderFilter } from '../ui/OrderStatusFilter'
+import { OrderStatusFilter, SearchBar, SelectBox } from '@/components/ui'
+import type { OrderFilter, SelectOption } from '@/components/ui'
 import AddOrderModal from '../orders/AddOrderModal'
 import OrderDetailModal from '../orders/OrderDetailModal'
 import AddCustomerModal from '../customers/AddCustomerModal'
@@ -50,6 +50,24 @@ interface KanbanBoardProps {
     onOrderRemoved: (orderId: string) => void
 }
 
+/** Order siap dipindah ke stage berikutnya (semua syarat stage terpenuhi) */
+const isOrderReady = (order: OrderWithCustomer): boolean => getOrderStageReadiness(order).isReady
+
+/** Order sudah melewati ambang batas hari di stage saat ini */
+const isOrderBottleneck = (order: Order): boolean => {
+    const stageEnteredAt = new Date(order.stage_entered_at)
+    const daysDiff = Math.floor((Date.now() - stageEnteredAt.getTime()) / (1000 * 60 * 60 * 24))
+    return daysDiff >= STAGE_BOTTLENECK_DAYS[order.stage]
+}
+
+/** Deadline order tinggal 3 hari lagi atau kurang */
+const isDeadlineSoon = (order: Order): boolean => {
+    if (!order.deadline) return false
+    const deadline = new Date(order.deadline)
+    const daysUntilDeadline = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    return daysUntilDeadline <= 3 && daysUntilDeadline >= 0
+}
+
 export default function KanbanBoard({
     orders,
     metrics,
@@ -64,10 +82,12 @@ export default function KanbanBoard({
     const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false)
     const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
+    // Dipakai untuk mereset input SearchBar (komponen uncontrolled)
+    const [searchKey, setSearchKey] = useState(0)
     const [activeId, setActiveId] = useState<string | null>(null)
     const [orderFilter, setOrderFilter] = useState<OrderFilter>('all')
-    const [adminFilter, setAdminFilter] = useState<string>('all') // Admin filter state
-    const [brandFilter, setBrandFilter] = useState<string>('all') // Brand filter state
+    const [adminFilter, setAdminFilter] = useState<string>('')
+    const [brandFilter, setBrandFilter] = useState<string>('')
 
     // Mobile responsive states
     const [isMobile, setIsMobile] = useState(false)
@@ -108,28 +128,8 @@ export default function KanbanBoard({
     )
 
     // Check if order is ready to move to next stage
-    const isOrderReady = (order: OrderWithCustomer): boolean => getOrderStageReadiness(order).isReady
-
-    // Check if order is bottleneck
-    const isOrderBottleneck = (order: Order): boolean => {
-        const stageEnteredAt = new Date(order.stage_entered_at)
-        const now = new Date()
-        const daysDiff = Math.floor((now.getTime() - stageEnteredAt.getTime()) / (1000 * 60 * 60 * 24))
-        const threshold = STAGE_BOTTLENECK_DAYS[order.stage]
-        return daysDiff >= threshold
-    }
-
-    // Check if order deadline is within 3 days
-    const isDeadlineSoon = (order: Order): boolean => {
-        if (!order.deadline) return false
-        const deadline = new Date(order.deadline)
-        const now = new Date()
-        const daysUntilDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-        return daysUntilDeadline <= 3 && daysUntilDeadline >= 0
-    }
-
-    // Filter orders based on search query, order status, and admin
-    const filteredOrders = useMemo(() => orders.filter(order => {
+    // Filter orders berdasarkan pencarian, admin, dan brand (tanpa filter status)
+    const baseOrders = useMemo(() => orders.filter(order => {
         // Search filter
         if (searchQuery) {
             const query = searchQuery.toLowerCase()
@@ -141,36 +141,57 @@ export default function KanbanBoard({
             if (!matchesSearch) return false
         }
 
-        // Order status filter
-        if (orderFilter !== 'all') {
-            switch (orderFilter) {
-                case 'needs_action':
-                    if (isOrderReady(order)) return false
-                    break
-                case 'ready_move':
-                    if (!isOrderReady(order)) return false
-                    break
-                case 'bottleneck':
-                    if (!isOrderBottleneck(order)) return false
-                    break
-                case 'deadline_soon':
-                    if (!isDeadlineSoon(order)) return false
-                    break
-            }
-        }
-
         // Admin filter
-        if (adminFilter !== 'all') {
-            if (order.created_by !== adminFilter) return false
-        }
+        if (adminFilter && order.created_by !== adminFilter) return false
 
         // Brand filter
-        if (brandFilter !== 'all') {
-            if (order.brand_id !== brandFilter) return false
-        }
+        if (brandFilter && order.brand_id !== brandFilter) return false
 
         return true
-    }), [adminFilter, brandFilter, orderFilter, orders, searchQuery])
+    }), [adminFilter, brandFilter, orders, searchQuery])
+
+    // Filter status order
+    const filteredOrders = useMemo(() => {
+        if (orderFilter === 'all') return baseOrders
+        return baseOrders.filter(order => {
+            switch (orderFilter) {
+                case 'needs_action': return !isOrderReady(order)
+                case 'ready_move': return isOrderReady(order)
+                case 'bottleneck': return isOrderBottleneck(order)
+                case 'deadline_soon': return isDeadlineSoon(order)
+                default: return true
+            }
+        })
+    }, [baseOrders, orderFilter])
+
+    // Hitungan per filter status, dipakai sebagai angka pada pil filter
+    const filterCounts = useMemo(() => ({
+        all: baseOrders.length,
+        needs_action: baseOrders.filter(order => !isOrderReady(order)).length,
+        ready_move: baseOrders.filter(order => isOrderReady(order)).length,
+        bottleneck: baseOrders.filter(order => isOrderBottleneck(order)).length,
+        deadline_soon: baseOrders.filter(order => isDeadlineSoon(order)).length,
+    }), [baseOrders])
+
+    const adminOptions = useMemo<SelectOption[]>(
+        () => admins.map(admin => ({ value: admin.id, label: admin.full_name })),
+        [admins]
+    )
+
+    const brandOptions = useMemo<SelectOption[]>(
+        () => brands.map(brand => ({ value: brand.id, label: brand.name, meta: brand.code })),
+        [brands]
+    )
+
+    const hasActiveFilter = searchQuery !== '' || adminFilter !== '' || brandFilter !== '' || orderFilter !== 'all'
+
+    const resetFilters = () => {
+        setSearchQuery('')
+        setSearchKey(key => key + 1)
+        setAdminFilter('')
+        setBrandFilter('')
+        setOrderFilter('all')
+    }
 
     // Group orders by stage
     const ordersByStage = useMemo(() => STAGES_ORDER.reduce((acc, stage) => {
@@ -178,19 +199,9 @@ export default function KanbanBoard({
         return acc
     }, {} as Record<OrderStage, OrderWithCustomer[]>), [filteredOrders])
 
-    // Check if order is bottleneck (exceeded stage-specific threshold)
-    // Proses Desain: 1 day, Other stages: 2 days
-    const isBottleneck = (order: Order) => {
-        const stageEnteredAt = new Date(order.stage_entered_at)
-        const now = new Date()
-        const daysDiff = Math.floor((now.getTime() - stageEnteredAt.getTime()) / (1000 * 60 * 60 * 24))
-        const threshold = STAGE_BOTTLENECK_DAYS[order.stage]
-        return daysDiff >= threshold
-    }
-
     // Check if stage has any bottleneck orders
     const hasBottleneckOrders = (stage: OrderStage) => {
-        return ordersByStage[stage]?.some(order => isBottleneck(order)) || false
+        return ordersByStage[stage]?.some(order => isOrderBottleneck(order)) || false
     }
 
     // Check if stage is a gatekeeper
@@ -338,104 +349,70 @@ export default function KanbanBoard({
                 <MetricsBar metrics={metrics} />
 
                 {/* Search and Add Button Row */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     <div className="flex-1">
-                        <SearchBar onSearch={setSearchQuery} />
+                        <SearchBar key={searchKey} onSearch={setSearchQuery} />
                     </div>
                     <button
                         onClick={() => setIsAddCustomerModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-3 md:px-6 rounded-xl bg-slate-600 text-white font-semibold hover:bg-slate-700 transition-all shadow-lg shadow-slate-600/25 whitespace-nowrap"
+                        className="btn-secondary"
                     >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
                         </svg>
                         <span className="hidden sm:inline">Tambah Customer</span>
                     </button>
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center gap-2 px-4 py-3 md:px-6 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 transition-all shadow-lg shadow-red-500/25 whitespace-nowrap"
+                        className="btn-primary"
                     >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                         </svg>
                         <span className="hidden sm:inline">Tambah Order</span>
                     </button>
                 </div>
 
-                {/* Filter Row - Horizontal scroll on mobile */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    <span className="text-sm font-medium text-slate-600 whitespace-nowrap">Filter:</span>
-                    <OrderStatusFilter onFilterChange={setOrderFilter} />
+                {/* Filter Row */}
+                <div className="surface flex flex-wrap items-center gap-2 p-2">
+                    <OrderStatusFilter
+                        value={orderFilter}
+                        onChange={setOrderFilter}
+                        counts={filterCounts}
+                    />
 
-                    {/* Admin Filter Dropdown with Icon */}
-                    <div className="relative flex items-center">
-                        <svg
-                            className={`absolute left-2.5 w-4 h-4 pointer-events-none transition-colors ${adminFilter !== 'all' ? 'text-white' : 'text-slate-500'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                        <select
-                            value={adminFilter}
-                            onChange={(e) => setAdminFilter(e.target.value)}
-                            className={`pl-8 pr-8 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all appearance-none cursor-pointer ${adminFilter !== 'all'
-                                ? 'bg-slate-700 text-white border-slate-700 font-semibold'
-                                : 'bg-white text-slate-700 border-slate-200'
-                                }`}
-                        >
-                            <option value="all" className="bg-white text-slate-700">Semua Admin</option>
-                            {admins.map(admin => (
-                                <option key={admin.id} value={admin.id} className="bg-white text-slate-700">
-                                    {admin.full_name}
-                                </option>
-                            ))}
-                        </select>
-                        <svg
-                            className={`absolute right-2 w-4 h-4 pointer-events-none transition-colors ${adminFilter !== 'all' ? 'text-white' : 'text-slate-400'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </div>
+                    <SelectBox
+                        className="w-40 shrink-0"
+                        options={adminOptions}
+                        value={adminFilter}
+                        onChange={setAdminFilter}
+                        clearable
+                        clearLabel="Semua Admin"
+                        placeholder="Semua Admin"
+                        searchable={false}
+                        ariaLabel="Filter admin"
+                    />
+                    <SelectBox
+                        className="w-40 shrink-0"
+                        options={brandOptions}
+                        value={brandFilter}
+                        onChange={setBrandFilter}
+                        clearable
+                        clearLabel="Semua Brand"
+                        placeholder="Semua Brand"
+                        searchable={false}
+                        ariaLabel="Filter brand"
+                    />
 
-                    {/* Brand Filter Dropdown with Icon */}
-                    <div className="relative flex items-center">
-                        <svg
-                            className={`absolute left-2.5 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-500'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                    {hasActiveFilter && (
+                        <button
+                            type="button"
+                            onClick={resetFilters}
+                            className="btn-ghost btn-sm text-slate-600"
                         >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
-                        </svg>
-                        <select
-                            value={brandFilter}
-                            onChange={(e) => setBrandFilter(e.target.value)}
-                            className={`pl-8 pr-8 py-1.5 text-sm rounded-lg border focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 transition-all appearance-none cursor-pointer ${brandFilter !== 'all'
-                                ? 'bg-slate-700 text-white border-slate-700 font-semibold'
-                                : 'bg-white text-slate-700 border-slate-200'
-                                }`}
-                        >
-                            <option value="all" className="bg-white text-slate-700">Semua Brand</option>
-                            {brands.map(brand => (
-                                <option key={brand.id} value={brand.id} className="bg-white text-slate-700">
-                                    {brand.name}
-                                </option>
-                            ))}
-                        </select>
-                        <svg
-                            className={`absolute right-2 w-4 h-4 pointer-events-none transition-colors ${brandFilter !== 'all' ? 'text-white' : 'text-slate-400'}`}
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                        >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </div>
+                            Reset
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -459,6 +436,7 @@ export default function KanbanBoard({
                                         ? 'text-slate-300 cursor-not-allowed'
                                         : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'
                                         }`}
+                                    aria-label="Stage sebelumnya"
                                 >
                                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -475,6 +453,7 @@ export default function KanbanBoard({
                                         ? 'text-slate-300 cursor-not-allowed'
                                         : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'
                                         }`}
+                                    aria-label="Stage berikutnya"
                                 >
                                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -488,10 +467,11 @@ export default function KanbanBoard({
                                         key={stage}
                                         onClick={() => setCurrentStageIndex(index)}
                                         className={`w-2 h-2 rounded-full transition-all ${index === currentStageIndex
-                                            ? 'bg-emerald-500 w-4'
+                                            ? 'bg-brand-600 w-4'
                                             : 'bg-slate-300 hover:bg-slate-400'
                                             }`}
                                         title={STAGE_LABELS[stage]}
+                                        aria-label={`Buka stage ${STAGE_LABELS[stage]}`}
                                     />
                                 ))}
                             </div>
@@ -506,8 +486,9 @@ export default function KanbanBoard({
                                 <div className="sticky top-1/2 -translate-y-1/2 pointer-events-auto">
                                     <button
                                         onClick={() => scrollKanban('left')}
-                                        className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all hover:scale-110 shadow-lg"
+                                        className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-brand-600 hover:text-white hover:border-brand-600 transition-all hover:scale-110 shadow-lg"
                                         title="Scroll Left"
+                                        aria-label="Geser ke kiri"
                                     >
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -521,8 +502,9 @@ export default function KanbanBoard({
                                 <div className="sticky top-1/2 -translate-y-1/2 pointer-events-auto">
                                     <button
                                         onClick={() => scrollKanban('right')}
-                                        className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 transition-all hover:scale-110 shadow-lg"
+                                        className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-brand-600 hover:text-white hover:border-brand-600 transition-all hover:scale-110 shadow-lg"
                                         title="Scroll Right"
+                                        aria-label="Geser ke kanan"
                                     >
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -544,7 +526,7 @@ export default function KanbanBoard({
                                 orders={ordersByStage[STAGES_ORDER[currentStageIndex]]}
                                 isGatekeeper={isGatekeeperStage(STAGES_ORDER[currentStageIndex])}
                                 isBottleneckStage={hasBottleneckOrders(STAGES_ORDER[currentStageIndex])}
-                                checkBottleneck={isBottleneck}
+                                checkBottleneck={isOrderBottleneck}
                                 onOrderClick={(order) => setSelectedOrderId(order.id)}
                                 fullWidth
                             />
@@ -564,7 +546,7 @@ export default function KanbanBoard({
                                         orders={ordersByStage[stage]}
                                         isGatekeeper={isGatekeeperStage(stage)}
                                         isBottleneckStage={hasBottleneckOrders(stage)}
-                                        checkBottleneck={isBottleneck}
+                                        checkBottleneck={isOrderBottleneck}
                                         onOrderClick={(order) => setSelectedOrderId(order.id)}
                                     />
                                 ))}
@@ -575,9 +557,9 @@ export default function KanbanBoard({
 
                 <DragOverlay>
                     {activeOrder ? (
-                        <div className="p-3 rounded-xl bg-white border-2 border-emerald-500 shadow-2xl opacity-90">
+                        <div className="p-3 rounded-xl bg-white border-2 border-brand-500 shadow-2xl opacity-90">
                             <p className="font-semibold text-slate-900 text-sm">{activeOrder.customer?.name}</p>
-                            <p className="text-xs text-slate-500">{activeOrder.total_quantity} pcs</p>
+                            <p className="text-xs text-slate-500 text-mono">{activeOrder.total_quantity} pcs</p>
                         </div>
                     ) : null}
                 </DragOverlay>

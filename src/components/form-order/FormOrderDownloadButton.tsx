@@ -57,7 +57,7 @@ export default function FormOrderDownloadButton({ order, variant = 'button', cla
                 type="button"
                 onClick={handleDownload}
                 disabled={loading}
-                className={`p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50 ${className || ''}`}
+                className={`p-2 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors disabled:opacity-50 ${className || ''}`}
                 title="Download PDF"
                 aria-label="Download PDF form order"
             >
@@ -71,7 +71,7 @@ export default function FormOrderDownloadButton({ order, variant = 'button', cla
             type="button"
             onClick={handleDownload}
             disabled={loading}
-            className={`flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 ${className || ''}`}
+            className={`btn-primary ${className || ''}`}
         >
             {loading ? spinner : downloadIcon}
             {loading ? 'Loading...' : 'Print Form Order'}

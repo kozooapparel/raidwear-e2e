@@ -1,6 +1,7 @@
 'use client'
 
 import { DashboardMetrics } from '@/types/database'
+import { StatCard } from '@/components/ui/ds'
 
 interface MetricsBarProps {
     metrics: DashboardMetrics
@@ -60,40 +61,20 @@ export default function MetricsBar({ metrics }: MetricsBarProps) {
         },
     ]
 
-    const toneStyles = {
-        default: { icon: 'bg-slate-100 text-slate-600' },
-        success: { icon: 'bg-emerald-50 text-emerald-600' },
-        warning: { icon: 'bg-amber-50 text-amber-600' },
-        danger: { icon: 'bg-red-50 text-red-600' },
-        info: { icon: 'bg-blue-50 text-blue-600' },
-    }
-
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             {metricsData.map((metric, index) => (
                 <div
                     key={index}
-                    className={`relative surface p-4 md:p-5 surface-hover ${metric.alert ? '!border-red-200 !ring-2 !ring-red-100' : ''}`}
+                    className={metric.alert ? 'rounded-xl ring-2 ring-red-100' : undefined}
                 >
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                            <p className="text-caption text-slate-500">{metric.label}</p>
-                            <p className={`mt-1.5 text-xl md:text-2xl font-bold tracking-tight text-mono truncate ${metric.tone === 'danger' ? 'text-red-600' : metric.tone === 'success' ? 'text-emerald-700' : metric.tone === 'warning' ? 'text-amber-700' : 'text-slate-900'}`}>
-                                {metric.value}
-                            </p>
-                        </div>
-                        <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${toneStyles[metric.tone].icon}`}>
-                            {metric.icon}
-                        </div>
-                    </div>
-                    {metric.alert && (
-                        <div className="absolute top-3 right-3">
-                            <span className="relative flex h-2.5 w-2.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                            </span>
-                        </div>
-                    )}
+                    <StatCard
+                        label={metric.label}
+                        value={metric.value}
+                        icon={metric.icon}
+                        tone={metric.tone}
+                        helper={metric.alert ? 'Perlu perhatian' : undefined}
+                    />
                 </div>
             ))}
         </div>

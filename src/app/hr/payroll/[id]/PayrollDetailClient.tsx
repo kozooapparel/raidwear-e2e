@@ -125,7 +125,7 @@ export default function PayrollDetailClient({
                 </div>
                 <div className="p-4 sm:p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
                     <p className="text-xs sm:text-sm text-slate-500">Total Net</p>
-                    <p className="text-lg sm:text-2xl font-bold text-purple-600 truncate">{formatCurrency(totalNet)}</p>
+                    <p className="text-lg sm:text-2xl font-bold text-brand-600 truncate">{formatCurrency(totalNet)}</p>
                 </div>
             </div>
 
@@ -168,7 +168,7 @@ export default function PayrollDetailClient({
                             </div>
                             <div>
                                 <p className="text-slate-500">Bonus</p>
-                                <p className="font-medium text-purple-600">+{formatCurrency(entry.total_bonuses)}</p>
+                                <p className="font-medium text-brand-600">+{formatCurrency(entry.total_bonuses)}</p>
                             </div>
                             <div>
                                 <p className="text-slate-500">Potongan</p>
@@ -177,7 +177,7 @@ export default function PayrollDetailClient({
                         </div>
                         <div className="mt-3 pt-3 border-t border-slate-200 flex justify-between items-center">
                             <span className="font-semibold text-slate-900">Gaji Bersih</span>
-                            <span className="text-lg font-bold text-purple-600">{formatCurrency(entry.net_salary)}</span>
+                            <span className="text-lg font-bold text-brand-600">{formatCurrency(entry.net_salary)}</span>
                         </div>
                     </div>
                 ))}
@@ -223,7 +223,7 @@ export default function PayrollDetailClient({
                                     <td className="text-right py-3 px-4 text-sm text-blue-600">
                                         +{formatCurrency(entry.total_overtime)}
                                     </td>
-                                    <td className="text-right py-3 px-4 text-sm text-purple-600">
+                                    <td className="text-right py-3 px-4 text-sm text-brand-600">
                                         +{formatCurrency(entry.total_bonuses)}
                                     </td>
                                     <td className="text-right py-3 px-4 text-sm text-red-600">
@@ -258,13 +258,13 @@ export default function PayrollDetailClient({
                                 <td className="text-right py-4 px-4 font-bold text-blue-600">
                                     {formatCurrency(period.payroll_entries?.reduce((s, e) => s + e.total_overtime, 0) || 0)}
                                 </td>
-                                <td className="text-right py-4 px-4 font-bold text-purple-600">
+                                <td className="text-right py-4 px-4 font-bold text-brand-600">
                                     {formatCurrency(period.payroll_entries?.reduce((s, e) => s + e.total_bonuses, 0) || 0)}
                                 </td>
                                 <td className="text-right py-4 px-4 font-bold text-red-600">
                                     -{formatCurrency(totalDeductions)}
                                 </td>
-                                <td className="text-right py-4 px-4 text-lg font-bold text-purple-700">
+                                <td className="text-right py-4 px-4 text-lg font-bold text-brand-700">
                                     {formatCurrency(totalNet)}
                                 </td>
                                 <td></td>
@@ -278,7 +278,7 @@ export default function PayrollDetailClient({
             {period.status === 'draft' && (
                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
                     <p className="text-sm text-amber-800">
-                        💡 <strong>Status: Draft</strong> - Payroll masih bisa diedit. Klik "Submit untuk Approval" di halaman list untuk mengirim ke Owner.
+                        💡 <strong>Status: Draft</strong> - Payroll masih bisa diedit. Klik &ldquo;Submit untuk Approval&rdquo; di halaman list untuk mengirim ke Owner.
                     </p>
                 </div>
             )}
@@ -286,7 +286,7 @@ export default function PayrollDetailClient({
             {period.status === 'pending_approval' && isOwner && (
                 <div className="p-4 rounded-xl bg-blue-50 border border-blue-200">
                     <p className="text-sm text-blue-800">
-                        👑 <strong>Menunggu Approval Anda</strong> - Silakan review slip gaji di atas. Jika sudah benar, klik "Approve Payroll" di halaman list.
+                        👑 <strong>Menunggu Approval Anda</strong> - Silakan review slip gaji di atas. Jika sudah benar, klik &ldquo;Approve Payroll&rdquo; di halaman list.
                     </p>
                 </div>
             )}

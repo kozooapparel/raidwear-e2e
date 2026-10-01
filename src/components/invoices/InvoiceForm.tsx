@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Customer, Barang, InvoiceWithItems, InvoiceItemInsert } from '@/types/database'
 import { createInvoice, updateInvoice } from '@/lib/actions/invoices'
@@ -12,6 +12,8 @@ import { toast } from 'sonner'
 import BrandSelector from './BrandSelector'
 import ItemPicker from './ItemPicker'
 import QuickCreateBarangModal from './QuickCreateBarangModal'
+import CustomerPicker from '@/components/orders/CustomerPicker'
+import QuickCreateCustomerModal from '@/components/orders/QuickCreateCustomerModal'
 import { CurrencyInput, NumberInput } from '@/components/ui'
 
 interface InvoiceFormProps {
@@ -87,8 +89,21 @@ export default function InvoiceForm({
     const [quickCreateIndex, setQuickCreateIndex] = useState<number | null>(null)
     const [quickCreateName, setQuickCreateName] = useState('')
 
+    // Customer baru yang dibuat dari dalam form invoice (belum ter-refresh dari server)
+    const [createdCustomers, setCreatedCustomers] = useState<Customer[]>([])
+    const [quickCreateCustomerOpen, setQuickCreateCustomerOpen] = useState(false)
+    const [quickCreateCustomerName, setQuickCreateCustomerName] = useState('')
+
     // Brand aktif menentukan daftar barang yang bisa dipilih
     const activeBrandId = selectedBrandId || prefilledBrandId
+
+    // Daftar customer = data dari server + customer yang baru saja dibuat di sesi ini
+    const allCustomers = useMemo(() => {
+        if (createdCustomers.length === 0) return customers
+        const createdIds = new Set(createdCustomers.map(c => c.id))
+        return [...createdCustomers, ...customers.filter(c => !createdIds.has(c.id))]
+            .sort((a, b) => a.name.localeCompare(b.name))
+    }, [customers, createdCustomers])
 
     // Load lookup data
     useEffect(() => {
@@ -136,8 +151,11 @@ export default function InvoiceForm({
     const ppnAmount = (subTotal * parseFloat(ppnPersen || '0')) / 100
     const total = subTotal + ppnAmount
 
-    // Get selected customer
-    const selectedCustomer = customers.find(c => c.id === customerId)
+    // Customer baru dibuat: daftarkan ke picker lalu pilih otomatis
+    const handleCustomerSaved = (customer: Customer) => {
+        setCreatedCustomers(prev => (prev.some(c => c.id === customer.id) ? prev : [...prev, customer]))
+        setCustomerId(customer.id)
+    }
 
     // Ganti brand: reset item agar harga brand lama tidak terbawa
     const handleBrandSelect = (brandId: string) => {
@@ -278,7 +296,7 @@ export default function InvoiceForm({
         setLoading(true)
 
         try {
-            const customerName = customers.find(c => c.id === customerId)?.name || 'Customer'
+            const customerName = allCustomers.find(c => c.id === customerId)?.name || 'Customer'
 
             const invoiceItems: Omit<InvoiceItemInsert, 'invoice_id'>[] = items
                 .filter(item => item.deskripsi)
@@ -330,12 +348,12 @@ export default function InvoiceForm({
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             {/* Header Actions */}
-            <div className="flex items-center justify-between bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 rounded-xl">
+            <div className="flex items-center justify-between bg-gradient-to-r from-brand-600 to-brand-700 text-white p-4 rounded-xl">
                 <div className="flex items-center gap-3">
                     <button
                         type="submit"
                         disabled={loading}
-                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-lg font-medium disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 bg-white text-brand-700 hover:bg-brand-50 rounded-lg font-semibold disabled:opacity-50 transition-colors"
                     >
                         {loading ? 'Menyimpan...' : 'Simpan'}
                     </button>
@@ -367,7 +385,7 @@ export default function InvoiceForm({
                         <div className="space-y-3">
                             <div className="flex items-center gap-3">
                                 <h1 className="text-3xl font-bold text-slate-800 tracking-tight">INVOICE</h1>
-                                <span className="px-3 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-600">
+                                <span className="badge badge-brand text-mono">
                                     {invoice?.no_invoice || 'DRAFT'}
                                 </span>
                             </div>
@@ -384,7 +402,7 @@ export default function InvoiceForm({
                                         type="date"
                                         value={tanggal}
                                         onChange={(e) => setTanggal(e.target.value)}
-                                        className="px-2 py-1 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 bg-white"
+                                        className="px-2 py-1 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40 bg-white"
                                     />
                                 </div>
                             </div>
@@ -399,7 +417,7 @@ export default function InvoiceForm({
                                     className="w-16 h-16 object-contain mb-2 rounded-lg"
                                 />
                             )}
-                            <h2 className="text-xl font-bold text-orange-500">
+                            <h2 className="text-xl font-bold text-brand-600">
                                 {brandInfo?.name || companyInfo?.name || 'RAIDWEAR'}
                             </h2>
                             <p className="text-xs text-slate-500 max-w-[200px] mt-1 leading-relaxed">
@@ -421,7 +439,7 @@ export default function InvoiceForm({
                             onChange={(v) => setPerkiraanProduksi(v > 0 ? String(v) : '')}
                             placeholder="16"
                             allowEmpty
-                            className="!w-14 !px-2 !py-1 !rounded !text-sm !text-center !bg-white !border-slate-200 focus:!ring-orange-500/50"
+                            className="!w-14 !px-2 !py-1 !rounded !text-sm !text-center !bg-white !border-slate-200 focus:!ring-brand-500/40"
                         />
                         <span className="text-sm text-slate-400">hari</span>
                     </div>
@@ -434,7 +452,7 @@ export default function InvoiceForm({
                             type="date"
                             value={deadline}
                             onChange={(e) => setDeadline(e.target.value)}
-                            className="px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            className="px-2 py-1 border border-slate-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/40"
                         />
                     </div>
                 </div>
@@ -444,25 +462,16 @@ export default function InvoiceForm({
                     <div className="grid grid-cols-2 gap-6">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Customer</label>
-                            <select
+                            <CustomerPicker
                                 value={customerId}
-                                onChange={(e) => setCustomerId(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                                required
-                            >
-                                <option value="">Pilih Customer</option>
-                                {customers.map(customer => (
-                                    <option key={customer.id} value={customer.id}>
-                                        {customer.name}
-                                    </option>
-                                ))}
-                            </select>
-                            {selectedCustomer && (
-                                <div className="mt-2 text-sm text-slate-600">
-                                    <p>{selectedCustomer.alamat || '-'}</p>
-                                    <p>Telp: {selectedCustomer.phone}</p>
-                                </div>
-                            )}
+                                customers={allCustomers}
+                                onSelect={(customer) => setCustomerId(customer.id)}
+                                onClear={() => setCustomerId('')}
+                                onCreateNew={(typed) => {
+                                    setQuickCreateCustomerName(typed)
+                                    setQuickCreateCustomerOpen(true)
+                                }}
+                            />
                         </div>
                         <div>
                             <div className="flex items-center gap-2 mb-1">
@@ -473,7 +482,7 @@ export default function InvoiceForm({
                                 type="text"
                                 value={noPo}
                                 onChange={(e) => setNoPo(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/15"
                                 placeholder="Nomor PO Customer"
                             />
                         </div>
@@ -619,7 +628,7 @@ export default function InvoiceForm({
                                         <NumberInput
                                             value={ppnPersen}
                                             onChange={(v) => setPpnPersen(String(v))}
-                                            className="!w-12 !px-2 !py-0.5 !rounded !text-xs !text-center !bg-white !border-slate-200 focus:!ring-orange-500/50"
+                                            className="!w-12 !px-2 !py-0.5 !rounded !text-xs !text-center !bg-white !border-slate-200 focus:!ring-brand-500/40"
                                             min={0}
                                             max={100}
                                         />
@@ -665,7 +674,7 @@ export default function InvoiceForm({
                             <div>
                                 <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Pembayaran</h4>
                                 <div className="space-y-1 text-sm">
-                                    <p className="text-slate-600">Bank: <span className="font-semibold text-blue-600">{bankInfo.bank_name}</span></p>
+                                    <p className="text-slate-600">Bank: <span className="font-semibold text-brand-600">{bankInfo.bank_name}</span></p>
                                     <p className="text-slate-600">A/N: <span className="font-medium text-slate-800">{bankInfo.account_name}</span></p>
                                     <p className="text-slate-600">No. Rek: <span className="font-mono font-medium text-slate-800">{bankInfo.account_number}</span></p>
                                 </div>
@@ -675,7 +684,7 @@ export default function InvoiceForm({
                                 <NumberInput
                                     value={terminPembayaran}
                                     onChange={(v) => setTerminPembayaran(String(v))}
-                                    className="!w-14 !px-2 !py-1 !rounded !text-sm !text-center !bg-white !border-slate-200 focus:!ring-orange-500/50"
+                                    className="!w-14 !px-2 !py-1 !rounded !text-sm !text-center !bg-white !border-slate-200 focus:!ring-brand-500/40"
                                     min={1}
                                 />
                                 <span className="text-sm text-slate-400">hari</span>
@@ -692,6 +701,14 @@ export default function InvoiceForm({
                 brandId={activeBrandId || ''}
                 initialName={quickCreateName}
                 onCreated={handleBarangCreated}
+            />
+
+            {/* Form customer baru tanpa keluar dari invoice */}
+            <QuickCreateCustomerModal
+                isOpen={quickCreateCustomerOpen}
+                onClose={() => setQuickCreateCustomerOpen(false)}
+                initialName={quickCreateCustomerName}
+                onSaved={handleCustomerSaved}
             />
         </form>
     )

@@ -7,7 +7,7 @@ interface ModalProps {
     onClose: () => void
     title: string
     children: React.ReactNode
-    size?: 'sm' | 'md' | 'lg' | 'xl'
+    size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl'
 }
 
 const sizeClasses = {
@@ -15,6 +15,7 @@ const sizeClasses = {
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-xl',
+    '2xl': 'max-w-2xl',
 }
 
 export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
@@ -47,8 +48,13 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
                 onClick={onClose}
             />
 
-            {/* Modal */}
-            <div className={`relative w-full ${sizeClasses[size]} bg-white rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
+            {/* Modal — tanpa overflow-hidden agar dropdown di dalamnya tidak terpotong */}
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={title}
+                className={`relative w-full ${sizeClasses[size]} bg-white rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-200`}
+            >
                 {/* Header */}
                 <div className="px-5 py-4 border-b border-slate-200">
                     <div className="flex items-center justify-between">

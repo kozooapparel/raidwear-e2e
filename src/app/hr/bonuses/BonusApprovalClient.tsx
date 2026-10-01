@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { approveBonus } from '../employees/actions'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui'
+import { PageHeader, EmptyState, DefaultEmptyIcon } from '@/components/ui/ds'
 
 interface Bonus {
     id: string
@@ -26,9 +28,12 @@ interface Bonus {
 export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonuses: Bonus[] }) {
     const [bonuses, setBonuses] = useState<Bonus[]>(initialBonuses)
     const [loading, setLoading] = useState('')
+    // Bonus yang menunggu konfirmasi approve
+    const [pendingApprove, setPendingApprove] = useState<Bonus | null>(null)
 
-    const handleApprove = async (bonusId: string) => {
-        if (!confirm('Approve bonus ini? Akan otomatis masuk ke payroll periode terkait.')) return
+    const handleApprove = async () => {
+        if (!pendingApprove) return
+        const bonusId = pendingApprove.id
 
         setLoading(bonusId)
         const result = await approveBonus(bonusId)
@@ -43,6 +48,7 @@ export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonus
         }
 
         setLoading('')
+        setPendingApprove(null)
     }
 
     const formatCurrency = (amount: number) => {
@@ -65,10 +71,10 @@ export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonus
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900">Approval Bonus Karyawan</h1>
-                <p className="text-slate-500 mt-1">Review dan approve bonus yang diajukan admin</p>
-            </div>
+            <PageHeader
+                title="Approval Bonus Karyawan"
+                description="Review dan approve bonus yang diajukan admin"
+            />
 
             {/* Pending Bonuses */}
             <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
@@ -100,7 +106,7 @@ export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonus
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500">Nominal</p>
-                                                <p className="font-bold text-purple-600">{formatCurrency(bonus.amount)}</p>
+                                                <p className="font-bold text-brand-600">{formatCurrency(bonus.amount)}</p>
                                             </div>
                                             <div>
                                                 <p className="text-xs text-slate-500">Periode</p>
@@ -115,9 +121,9 @@ export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonus
                                         )}
                                     </div>
                                     <button
-                                        onClick={() => handleApprove(bonus.id)}
+                                        onClick={() => setPendingApprove(bonus)}
                                         disabled={loading === bonus.id}
-                                        className="ml-4 px-6 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition-colors disabled:opacity-50"
+                                        className="ml-4 btn-primary"
                                     >
                                         {loading === bonus.id ? 'Approving...' : 'Approve'}
                                     </button>
@@ -126,12 +132,11 @@ export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonus
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-12">
-                        <svg className="w-16 h-16 mx-auto text-slate-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p className="text-slate-500">Tidak ada bonus pending</p>
-                    </div>
+                    <EmptyState
+                        variant="compact"
+                        icon={<DefaultEmptyIcon />}
+                        title="Tidak ada bonus pending"
+                    />
                 )}
             </div>
 
@@ -160,6 +165,18 @@ export default function BonusApprovalClient({ bonuses: initialBonuses }: { bonus
                     </div>
                 </div>
             )}
+
+            {/* Konfirmasi approve bonus */}
+            <ConfirmDialog
+                isOpen={pendingApprove !== null}
+                onClose={() => { if (!loading) setPendingApprove(null) }}
+                onConfirm={handleApprove}
+                title="Approve bonus ini?"
+                description="Bonus akan otomatis masuk ke payroll periode terkait."
+                confirmText="Approve"
+                tone="brand"
+                loading={loading !== ''}
+            />
         </div>
     )
 }

@@ -7,7 +7,7 @@ import { createKuitansi } from '@/lib/actions/kuitansi'
 import { formatCurrency, formatDateInput, formatDate } from '@/lib/utils/format'
 import { terbilang } from '@/lib/utils/terbilang'
 import { toast } from 'sonner'
-import { CurrencyInput } from '@/components/ui'
+import { CurrencyInput, SelectBox } from '@/components/ui'
 
 interface KuitansiFormProps {
     unpaidInvoices: (InvoiceWithCustomer & { brand?: Brand | null })[]
@@ -25,6 +25,11 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
 
     // Get selected invoice details
     const selectedInvoice = unpaidInvoices.find(inv => inv.id === invoiceId)
+
+    const invoiceOptions = unpaidInvoices.map(inv => ({
+        value: inv.id,
+        label: `${inv.no_invoice} - ${inv.customer?.name ?? 'Tanpa nama'}`,
+    }))
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -74,12 +79,12 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
             {/* Header Actions */}
-            <div className="flex items-center justify-between bg-gradient-to-r from-blue-500 to-cyan-500 text-white p-4 rounded-xl">
+            <div className="flex items-center justify-between bg-gradient-to-r from-brand-600 to-brand-700 text-white p-4 rounded-xl">
                 <div className="flex items-center gap-3">
                     <button
                         type="submit"
                         disabled={loading}
-                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 rounded-lg font-medium disabled:opacity-50 transition-colors"
+                        className="px-4 py-2 bg-white text-brand-700 hover:bg-brand-50 rounded-lg font-semibold disabled:opacity-50 transition-colors"
                     >
                         {loading ? 'Menyimpan...' : 'Simpan'}
                     </button>
@@ -134,7 +139,7 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                                     className="w-14 h-14 object-contain mb-2 rounded-lg bg-white/10 p-1"
                                 />
                             )}
-                            <h2 className="text-lg font-bold text-cyan-400">
+                            <h2 className="text-lg font-bold text-brand-400">
                                 {selectedInvoice?.brand?.company_name || 'RAIDWEAR'}
                             </h2>
                             {selectedInvoice?.brand?.address && (
@@ -154,19 +159,15 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                         </svg>
                         <span className="text-sm text-slate-500">Referensi Invoice:</span>
                     </div>
-                    <select
+                    <SelectBox
+                        className="w-72 shrink-0"
+                        options={invoiceOptions}
                         value={invoiceId}
-                        onChange={(e) => setInvoiceId(e.target.value)}
-                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 min-w-[250px]"
-                        required
-                    >
-                        <option value="">Pilih Invoice</option>
-                        {unpaidInvoices.map(inv => (
-                            <option key={inv.id} value={inv.id}>
-                                {inv.no_invoice} - {inv.customer?.name}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={setInvoiceId}
+                        placeholder="Pilih Invoice"
+                        emptyText="Tidak ada invoice belum lunas"
+                        ariaLabel="Pilih invoice"
+                    />
                 </div>
 
                 {/* Content */}
@@ -198,7 +199,7 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                                         value={jumlah}
                                         onChange={(v) => setJumlah(v > 0 ? String(v) : '')}
                                         showPrefix={false}
-                                        className="!w-48 !px-4 !py-2 !border-2 !rounded-lg !text-xl !font-bold !bg-white !border-slate-300 focus:!ring-blue-500/50"
+                                        className="!w-48 !px-4 !py-2 !border-2 !rounded-lg !text-xl !font-bold !bg-white !border-slate-300 focus:!ring-brand-500/40"
                                         placeholder="0"
                                         min={0}
                                         max={selectedInvoice?.sisa_tagihan}
@@ -207,7 +208,7 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                                         <button
                                             type="button"
                                             onClick={fillFullAmount}
-                                            className="px-3 py-2 bg-emerald-50 text-emerald-600 text-sm font-medium rounded-lg hover:bg-emerald-100 transition-colors"
+                                            className="px-3 py-2 bg-brand-50 text-brand-600 text-sm font-medium rounded-lg hover:bg-brand-100 transition-colors"
                                         >
                                             Penuh ({formatCurrency(selectedInvoice.sisa_tagihan)})
                                         </button>
@@ -220,11 +221,11 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                     {/* Terbilang */}
                     <div className="flex items-start gap-4">
                         <div className="w-48 text-sm text-slate-500">
-                            <p className="font-medium text-orange-600">Terbilang</p>
+                            <p className="font-medium text-brand-600">Terbilang</p>
                             <p className="text-xs italic">Amount in words</p>
                         </div>
                         <div className="flex-1">
-                            <p className="text-orange-600 font-medium">
+                            <p className="text-brand-600 font-medium">
                                 : {jumlah && parseFloat(jumlah) > 0 ? terbilang(parseFloat(jumlah)) : '...'}
                             </p>
                         </div>
@@ -233,11 +234,11 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                     {/* Untuk Pembayaran */}
                     <div className="flex items-start gap-4">
                         <div className="w-48 text-sm text-slate-500">
-                            <p className="font-medium text-blue-600">Untuk Pembayaran</p>
+                            <p className="font-medium text-brand-600">Untuk Pembayaran</p>
                             <p className="text-xs italic">In Payment of</p>
                         </div>
                         <div className="flex-1">
-                            <p className="text-blue-600 font-medium">
+                            <p className="text-brand-600 font-medium">
                                 : Pembayaran invoice no: {selectedInvoice?.no_invoice || '...'}
                             </p>
                         </div>
@@ -258,7 +259,7 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                                 </div>
                                 <div>
                                     <span className="text-slate-500">Sisa Tagihan:</span>
-                                    <span className="ml-2 font-bold text-orange-500">{formatCurrency(selectedInvoice.sisa_tagihan)}</span>
+                                    <span className="ml-2 font-bold text-brand-600">{formatCurrency(selectedInvoice.sisa_tagihan)}</span>
                                 </div>
                                 <div>
                                     <span className="text-slate-500">Tanggal Invoice:</span>
@@ -276,7 +277,7 @@ export default function KuitansiForm({ unpaidInvoices, prefilledInvoiceId }: Kui
                                     type="text"
                                     value={lokasi}
                                     onChange={(e) => setLokasi(e.target.value)}
-                                    className="px-2 py-1 border-b border-slate-300 bg-transparent focus:outline-none focus:border-blue-500"
+                                    className="px-2 py-1 border-b border-slate-300 bg-transparent focus:outline-none focus:border-brand-500"
                                 />
                                 <span>, {formatDate(tanggal ? new Date(tanggal) : new Date())}</span>
                             </div>

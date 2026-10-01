@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import AddCustomerModal from './AddCustomerModal'
@@ -8,6 +8,8 @@ import CustomerDetailModal from './CustomerDetailModal'
 import EditCustomerModal from './EditCustomerModal'
 import { deleteCustomer } from '@/lib/actions/customers'
 import { PageHeader, EmptyState, DefaultEmptyIcon, StatCard } from '@/components/ui/ds'
+import { SearchBar, SelectBox, ConfirmDialog, FilterPills } from '@/components/ui'
+import type { SelectOption, FilterPillOption } from '@/components/ui'
 
 interface CustomerWithStats {
     id: string
@@ -80,12 +82,26 @@ interface TierInfo {
     tone: TierTone
 }
 
-const getCustomerTier = (orderCount: number): TierInfo => {
-    if (orderCount >= 10) return { label: 'VIP', tone: 'warning' }
-    if (orderCount >= 5) return { label: 'Loyal', tone: 'brand' }
-    if (orderCount >= 2) return { label: 'Repeat', tone: 'info' }
-    return { label: 'New', tone: 'success' }
+type TierKey = 'vip' | 'loyal' | 'repeat' | 'new'
+type TierFilter = 'all' | TierKey
+type SortKey = 'name' | 'orders' | 'revenue' | 'recent'
+
+/** Ambang batas tier dipakai bersama oleh filter, pill, dan badge */
+const tierOf = (orderCount: number): TierKey => {
+    if (orderCount >= 10) return 'vip'
+    if (orderCount >= 5) return 'loyal'
+    if (orderCount >= 2) return 'repeat'
+    return 'new'
 }
+
+const TIER_META: Record<TierKey, TierInfo> = {
+    vip: { label: 'VIP', tone: 'warning' },
+    loyal: { label: 'Loyal', tone: 'brand' },
+    repeat: { label: 'Repeat', tone: 'info' },
+    new: { label: 'New', tone: 'success' },
+}
+
+const getCustomerTier = (orderCount: number): TierInfo => TIER_META[tierOf(orderCount)]
 
 const toneToBadge: Record<TierTone, string> = {
     default: 'badge-neutral',
@@ -95,6 +111,21 @@ const toneToBadge: Record<TierTone, string> = {
     brand: 'badge-brand',
 }
 
+const SORT_OPTIONS: SelectOption[] = [
+    { value: 'name', label: 'Nama (A-Z)' },
+    { value: 'orders', label: 'Order terbanyak' },
+    { value: 'revenue', label: 'Revenue terbesar' },
+    { value: 'recent', label: 'Terbaru' },
+]
+
+const TIER_FILTERS: FilterPillOption<TierFilter>[] = [
+    { value: 'all', label: 'Semua', tone: 'neutral' },
+    { value: 'vip', label: 'VIP', tone: 'warning' },
+    { value: 'loyal', label: 'Loyal', tone: 'brand' },
+    { value: 'repeat', label: 'Repeat', tone: 'info' },
+    { value: 'new', label: 'New', tone: 'success' },
+]
+
 export default function CustomerList({ customers: initialCustomers }: CustomerListProps) {
     const [customers, setCustomers] = useState<CustomerWithStats[]>(initialCustomers)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -103,6 +134,13 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
     const [isMobile, setIsMobile] = useState(false)
+
+    // Toolbar daftar: pencarian, filter tier, pengurutan
+    const [searchQuery, setSearchQuery] = useState('')
+    const [tierFilter, setTierFilter] = useState<TierFilter>('all')
+    const [sortBy, setSortBy] = useState<SortKey>('name')
+    // Bump key untuk mereset SearchBar (komponen uncontrolled)
+    const [searchKey, setSearchKey] = useState(0)
 
     // Sync with server data when page re-renders (e.g. first load)
     useEffect(() => {
@@ -172,8 +210,46 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
 
     const totalCustomers = customers.length
     const totalRevenue = customers.reduce((sum, c) => sum + c.total_revenue, 0)
-    const vipCount = customers.filter(c => c.order_count >= 10).length
-    const repeatCount = customers.filter(c => c.order_count >= 2).length
+
+    // Jumlah per tier, dipakai oleh kartu statistik dan pill filter
+    const tierCounts = useMemo(() => {
+        const counts: Record<TierFilter, number> = { all: customers.length, vip: 0, loyal: 0, repeat: 0, new: 0 }
+        customers.forEach((c) => { counts[tierOf(c.order_count)] += 1 })
+        return counts
+    }, [customers])
+
+    const tierFilterOptions = useMemo(
+        () => TIER_FILTERS.map((f) => ({ ...f, count: tierCounts[f.value] })),
+        [tierCounts]
+    )
+
+    // Daftar yang tampil setelah difilter & diurutkan
+    const visibleCustomers = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase()
+        const qDigits = q.replace(/\D/g, '')
+        const list = customers.filter((c) => {
+            if (tierFilter !== 'all' && tierOf(c.order_count) !== tierFilter) return false
+            if (!q) return true
+            if (c.name.toLowerCase().includes(q)) return true
+            return qDigits.length > 0 && c.phone.replace(/\D/g, '').includes(qDigits)
+        })
+        return [...list].sort((a, b) => {
+            switch (sortBy) {
+                case 'orders': return b.order_count - a.order_count
+                case 'revenue': return b.total_revenue - a.total_revenue
+                case 'recent': return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                default: return a.name.localeCompare(b.name, 'id')
+            }
+        })
+    }, [customers, searchQuery, tierFilter, sortBy])
+
+    const hasActiveFilter = searchQuery.trim().length > 0 || tierFilter !== 'all'
+
+    const resetFilters = () => {
+        setSearchQuery('')
+        setTierFilter('all')
+        setSearchKey((k) => k + 1)
+    }
 
     return (
         <div className="space-y-6">
@@ -216,17 +292,54 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                 />
                 <StatCard
                     label="VIP Customers"
-                    value={vipCount}
+                    value={tierCounts.vip}
                     tone="warning"
                 />
                 <StatCard
                     label="Repeat Customers"
-                    value={repeatCount}
+                    value={tierCounts.repeat}
                     tone="info"
                 />
             </div>
 
-            {/* Customer List - Responsive */}
+            {/* Toolbar: pencarian, filter tier, pengurutan */}
+            {customers.length > 0 && (
+                <div className="surface space-y-3 p-3 md:p-4">
+                    <div className="flex flex-col gap-3 md:flex-row">
+                        <div className="min-w-0 flex-1">
+                            <SearchBar
+                                key={searchKey}
+                                onSearch={setSearchQuery}
+                                placeholder="Cari nama atau no. HP customer..."
+                            />
+                        </div>
+                        <div className="w-full shrink-0 md:w-56">
+                            <SelectBox
+                                options={SORT_OPTIONS}
+                                value={sortBy}
+                                onChange={(value) => setSortBy(value as SortKey)}
+                                searchable={false}
+                                placeholder="Urutkan"
+                                ariaLabel="Urutkan customer"
+                            />
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <FilterPills
+                            options={tierFilterOptions}
+                            value={tierFilter}
+                            onChange={setTierFilter}
+                            size="sm"
+                            ariaLabel="Filter tier customer"
+                        />
+                        <span className="ml-auto text-xs text-slate-500">
+                            Menampilkan <span className="font-semibold text-slate-700">{visibleCustomers.length}</span> dari {customers.length}
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Daftar Customer - Responsif */}
             {customers.length === 0 ? (
                 <div className="surface">
                     <EmptyState
@@ -241,10 +354,25 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                         }
                     />
                 </div>
+            ) : visibleCustomers.length === 0 ? (
+                <div className="surface">
+                    <EmptyState
+                        icon={<DefaultEmptyIcon />}
+                        title="Tidak ada customer yang cocok"
+                        description="Coba ubah kata kunci pencarian atau filter tier yang dipilih."
+                        action={
+                            hasActiveFilter ? (
+                                <button onClick={resetFilters} className="btn-secondary">
+                                    Reset Filter
+                                </button>
+                            ) : undefined
+                        }
+                    />
+                </div>
             ) : isMobile ? (
                 // Mobile: Card Layout
                 <div className="space-y-3">
-                    {customers.map((customer) => {
+                    {visibleCustomers.map((customer) => {
                         const tier = getCustomerTier(customer.order_count)
                         return (
                             <div
@@ -259,7 +387,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                     <div className="flex-1 min-w-0">
                                         <button
                                             onClick={() => setSelectedCustomer(customer)}
-                                            className="font-semibold text-slate-900 hover:text-red-600 transition-colors block truncate text-left"
+                                            className="font-semibold text-slate-900 hover:text-brand-600 transition-colors block truncate text-left"
                                         >
                                             {customer.name}
                                         </button>
@@ -334,7 +462,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                                {customers.map((customer) => {
+                                {visibleCustomers.map((customer) => {
                                     const tier = getCustomerTier(customer.order_count)
                                     return (
                                         <tr
@@ -346,7 +474,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                                     <div className="w-9 h-9 rounded-full bg-brand-gradient flex items-center justify-center text-sm font-bold text-white">
                                                         {customer.name.charAt(0).toUpperCase()}
                                                     </div>
-                                                    <span className="font-medium text-slate-900 group-hover:text-red-600 transition-colors">
+                                                    <span className="font-medium text-slate-900 group-hover:text-brand-600 transition-colors">
                                                         {customer.name}
                                                     </span>
                                                 </button>
@@ -431,43 +559,18 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                 onCustomerUpdated={handleCustomerUpdated}
             />
 
-            {/* Delete Confirmation Dialog */}
-            {deleteConfirmId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
-                        onClick={() => !deleting && setDeleteConfirmId(null)}
-                        aria-hidden="true"
-                    />
-                    <div className="relative bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-scaleIn">
-                        <div className="text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mx-auto mb-4">
-                                <Icon.Trash className="w-6 h-6 text-red-600" />
-                            </div>
-                            <h3 className="text-h3 text-slate-900 mb-2">Hapus Customer?</h3>
-                            <p className="text-sm text-slate-500 mb-6">
-                                Customer yang memiliki order tidak bisa dihapus. Pastikan tidak ada order terkait.
-                            </p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setDeleteConfirmId(null)}
-                                    disabled={deleting}
-                                    className="flex-1 btn-secondary"
-                                >
-                                    Batal
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteCustomer(deleteConfirmId)}
-                                    disabled={deleting}
-                                    className="flex-1 btn-danger"
-                                >
-                                    {deleting ? 'Menghapus...' : 'Hapus'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Konfirmasi Hapus */}
+            <ConfirmDialog
+                isOpen={deleteConfirmId !== null}
+                onClose={() => setDeleteConfirmId(null)}
+                onConfirm={() => { if (deleteConfirmId) handleDeleteCustomer(deleteConfirmId) }}
+                title="Hapus Customer?"
+                description="Customer yang memiliki order tidak bisa dihapus. Pastikan tidak ada order terkait."
+                confirmText="Hapus"
+                tone="danger"
+                loading={deleting}
+                icon={<Icon.Trash className="w-6 h-6" />}
+            />
         </div>
     )
 }

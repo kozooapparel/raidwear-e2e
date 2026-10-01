@@ -1,45 +1,40 @@
 'use client'
 
-import { useState } from 'react'
+import FilterPills from './FilterPills'
+import type { FilterPillOption, FilterTone } from './FilterPills'
 
-type OrderFilter = 'all' | 'needs_action' | 'ready_move' | 'bottleneck' | 'deadline_soon'
+export type OrderFilter = 'all' | 'needs_action' | 'ready_move' | 'bottleneck' | 'deadline_soon'
 
 interface OrderStatusFilterProps {
-    onFilterChange: (filter: OrderFilter) => void
+    value: OrderFilter
+    onChange: (filter: OrderFilter) => void
+    /** Jumlah order per filter, opsional — ditampilkan sebagai angka kecil di pil */
+    counts?: Partial<Record<OrderFilter, number>>
+    className?: string
 }
 
-const FILTER_OPTIONS: { value: OrderFilter; label: string; activeColor: string }[] = [
-    { value: 'all', label: 'Semua', activeColor: 'bg-slate-700 text-white' },
-    { value: 'needs_action', label: 'Perlu Action', activeColor: 'bg-red-500 text-white' },
-    { value: 'ready_move', label: 'Siap Pindah', activeColor: 'bg-emerald-500 text-white' },
-    { value: 'bottleneck', label: 'Bottleneck', activeColor: 'bg-amber-500 text-white' },
-    { value: 'deadline_soon', label: 'Deadline Dekat', activeColor: 'bg-purple-500 text-white' },
+const FILTER_OPTIONS: { value: OrderFilter; label: string; tone: FilterTone }[] = [
+    { value: 'all', label: 'Semua', tone: 'neutral' },
+    { value: 'needs_action', label: 'Perlu Action', tone: 'danger' },
+    { value: 'ready_move', label: 'Siap Pindah', tone: 'success' },
+    { value: 'bottleneck', label: 'Bottleneck', tone: 'warning' },
+    { value: 'deadline_soon', label: 'Deadline Dekat', tone: 'info' },
 ]
 
-export default function OrderStatusFilter({ onFilterChange }: OrderStatusFilterProps) {
-    const [activeFilter, setActiveFilter] = useState<OrderFilter>('all')
-
-    const handleClick = (filter: OrderFilter) => {
-        setActiveFilter(filter)
-        onFilterChange(filter)
-    }
+export default function OrderStatusFilter({ value, onChange, counts, className }: OrderStatusFilterProps) {
+    const options: FilterPillOption<OrderFilter>[] = FILTER_OPTIONS.map((option) => ({
+        ...option,
+        count: counts?.[option.value],
+    }))
 
     return (
-        <div className="flex items-center gap-2">
-            {FILTER_OPTIONS.map((option) => (
-                <button
-                    key={option.value}
-                    onClick={() => handleClick(option.value)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all whitespace-nowrap ${activeFilter === option.value
-                        ? `${option.activeColor} shadow-sm`
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300'
-                        }`}
-                >
-                    {option.label}
-                </button>
-            ))}
-        </div>
+        <FilterPills
+            options={options}
+            value={value}
+            onChange={onChange}
+            size="sm"
+            className={className}
+            ariaLabel="Filter status order"
+        />
     )
 }
-
-export type { OrderFilter }

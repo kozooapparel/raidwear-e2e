@@ -66,7 +66,7 @@ export default function KuitansiDownloadButton({ kuitansiId, variant = 'button',
             <button
                 onClick={handleDownload}
                 disabled={loading}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${className || ''}`}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${className || ''}`}
                 title="Download PDF"
             >
                 {loading ? (
@@ -88,7 +88,7 @@ export default function KuitansiDownloadButton({ kuitansiId, variant = 'button',
         <button
             onClick={handleDownload}
             disabled={loading}
-            className={`px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50 transition-colors ${className || ''}`}
+            className={`btn-primary ${className || ''}`}
         >
             {loading ? 'Generating...' : 'PDF'}
         </button>
