@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { ProductionSpecs, STAGE_LABELS, STAGES_ORDER, OrderStage, OrderWithCustomer } from '@/types/database'
 import { deleteOrder } from '@/lib/actions/orders'
 import { toast } from 'sonner'
@@ -43,6 +44,11 @@ const STAGE_TONES: Record<OrderStage, FilterTone> = {
 }
 
 const Icon = {
+    Image: (p: { className?: string }) => (
+        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+    ),
     Pencil: (p: { className?: string }) => (
         <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -191,9 +197,9 @@ export default function FormOrderList({ orders: initialOrders, brands }: FormOrd
             </div>
 
             {/* Cards */}
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
                 {filteredOrders.length === 0 ? (
-                    <div className="surface">
+                    <div className="surface sm:col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-6">
                         <EmptyState
                             icon={<DefaultEmptyIcon />}
                             title={hasActiveFilter ? 'Tidak ada form order ditemukan' : 'Belum ada form order'}
@@ -213,48 +219,85 @@ export default function FormOrderList({ orders: initialOrders, brands }: FormOrd
                         const qty = specs?.jumlah_produksi || order.total_quantity || 0
 
                         return (
-                            <div
+                            <article
                                 key={order.id}
-                                className={`surface surface-hover p-4 ${!order.spk_number ? '!border-amber-200/70' : ''}`}
+                                className={`surface surface-hover group flex flex-col overflow-hidden ${!order.spk_number ? '!border-amber-200/70' : ''}`}
                             >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                            {order.spk_number ? (
-                                                <span className="text-mono font-bold text-red-600">{order.spk_number}</span>
-                                            ) : (
-                                                <span className="badge badge-warning">Draft</span>
-                                            )}
-                                            {order.nama_po && (
-                                                <span className="text-sm text-slate-600">• PO: {order.nama_po}</span>
-                                            )}
-                                            <span className="badge badge-info">{STAGE_LABELS[order.stage]}</span>
-                                            {order.brand?.code && (
-                                                <span className="badge badge-neutral text-mono">{order.brand.code}</span>
-                                            )}
+                                {/* Thumbnail desain ukuran sedang — cukup jelas untuk mengenali jersey */}
+                                <div className="relative aspect-[4/3] w-full overflow-hidden border-b border-slate-100 bg-slate-100">
+                                    {order.mockup_url ? (
+                                        <Image
+                                            src={order.mockup_url}
+                                            alt={`Desain ${order.spk_number || order.nama_po || order.customer?.name || 'order'}`}
+                                            fill
+                                            sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 17vw"
+                                            className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                                        />
+                                    ) : (
+                                        <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-slate-300">
+                                            <Icon.Image className="h-7 w-7" />
+                                            <span className="text-xs font-medium text-slate-400">Belum ada desain</span>
                                         </div>
-                                        <p className="text-slate-900 font-medium truncate">{order.customer?.name}</p>
-                                        <div className="flex items-center gap-3 mt-2 text-sm text-slate-500 flex-wrap">
-                                            <span className="text-mono">{qty} pcs</span>
-                                            <span className="text-slate-300">•</span>
-                                            <span>Order: {formatTanggal(order.created_at)}</span>
-                                            <span className="text-slate-300">•</span>
-                                            <span>Deadline: {formatTanggal(getDeadlineProduksi(order.created_at))}</span>
-                                        </div>
-                                        {specs && (specs.jenis_produk || specs.jenis_bahan || specs.model_kerah) && (
-                                            <div className="flex gap-1.5 mt-2 flex-wrap">
-                                                {[specs.jenis_produk, specs.jenis_bahan, specs.model_kerah, specs.model_lengan]
-                                                    .filter(Boolean)
-                                                    .map((val, idx) => (
-                                                        <span key={idx} className="badge badge-info">
-                                                            {val}
-                                                        </span>
-                                                    ))}
-                                            </div>
+                                    )}
+
+                                    {/* Brand & status ditempel di atas thumbnail supaya kartu tetap ringkas */}
+                                    {order.brand?.code && (
+                                        <span className="badge badge-neutral text-mono absolute left-2 top-2 shadow-sm">
+                                            {order.brand.code}
+                                        </span>
+                                    )}
+                                    <span className="badge badge-info absolute right-2 top-2 shadow-sm">
+                                        {STAGE_LABELS[order.stage]}
+                                    </span>
+                                </div>
+
+                                <div className="flex flex-1 flex-col gap-2 p-3">
+                                    {/* Identitas: nomor SPK, customer, dan PO */}
+                                    <div className="min-w-0">
+                                        {order.spk_number ? (
+                                            <p className="text-mono truncate text-sm font-bold leading-tight text-red-600">
+                                                {order.spk_number}
+                                            </p>
+                                        ) : (
+                                            <span className="badge badge-warning">Draft</span>
+                                        )}
+                                        <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">
+                                            {order.customer?.name || '-'}
+                                        </p>
+                                        {order.nama_po && (
+                                            <p className="mt-0.5 truncate text-xs text-slate-500">PO: {order.nama_po}</p>
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                    {/* Spesifikasi singkat */}
+                                    {specs && (specs.jenis_produk || specs.jenis_bahan || specs.model_kerah) && (
+                                        <div className="flex flex-wrap gap-1">
+                                            {[specs.jenis_produk, specs.jenis_bahan, specs.model_kerah, specs.model_lengan]
+                                                .filter(Boolean)
+                                                .map((val, idx) => (
+                                                    <span key={idx} className="badge badge-info">
+                                                        {val}
+                                                    </span>
+                                                ))}
+                                        </div>
+                                    )}
+
+                                    {/* Metrik kunci: quantity dan deadline */}
+                                    <div className="mt-auto flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                                        <div className="min-w-0">
+                                            <p className="text-caption text-slate-400">Qty</p>
+                                            <p className="text-mono truncate text-xs font-semibold text-slate-800">{qty} pcs</p>
+                                        </div>
+                                        <div className="min-w-0 text-right">
+                                            <p className="text-caption text-slate-400">Deadline</p>
+                                            <p className="truncate text-xs font-semibold text-slate-800">
+                                                {formatTanggal(getDeadlineProduksi(order.created_at))}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Aksi */}
+                                    <div className="flex items-center justify-end gap-0.5 border-t border-slate-100 pt-2">
                                         <FormOrderPreviewButton order={order} />
                                         <FormOrderDownloadButton order={order} variant="icon" />
                                         <Link
@@ -276,7 +319,7 @@ export default function FormOrderList({ orders: initialOrders, brands }: FormOrd
                                         </button>
                                     </div>
                                 </div>
-                            </div>
+                            </article>
                         )
                     })
                 )}

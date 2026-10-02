@@ -109,12 +109,25 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
     const template = invoice.template_id || brandInfo?.default_invoice_template_id || 'invoice_01'
     const isMinimal = template === 'invoice_02'
     const isBold = template === 'invoice_03'
+    // Modern (invoice_01): header berwarna brand, tabel & aksen memakai warna utama.
+    // Minimal (invoice_02): header putih bergaris, hemat tinta, teks gelap.
+    // Bold (invoice_03): identitas brand dominan — header tebal + garis aksen, aksen menonjol.
     const headerStyle = isMinimal
         ? { ...styles.header, borderBottomWidth: 2, borderBottomColor: primaryColor, paddingBottom: 12 }
         : isBold
-            ? { ...styles.header, backgroundColor: primaryColor, padding: 16, borderRadius: 6 }
+            ? { ...styles.header, backgroundColor: primaryColor, padding: 18, borderRadius: 8, borderBottomWidth: 4, borderBottomColor: accentColor }
             : { ...styles.header, backgroundColor: primaryColor, padding: 12, borderRadius: 4 }
     const headerTextColor = isMinimal ? '#1e293b' : 'white'
+    const titleStyle = {
+        color: headerTextColor,
+        fontSize: isBold ? 30 : isMinimal ? 22 : 24,
+        letterSpacing: isBold ? 2 : 0,
+    }
+    const infoLabelColor = isMinimal ? '#64748b' : isBold ? '#e2e8f0' : '#cbd5e1'
+    const sectionTitleStyle = {
+        color: isMinimal ? '#475569' : isBold ? accentColor : primaryColor,
+        borderBottomColor: isMinimal ? '#e2e8f0' : `${isBold ? accentColor : primaryColor}40`,
+    }
     const tableHeaderStyle = isMinimal
         ? { ...styles.tableHeader, backgroundColor: '#64748b' }
         : isBold
@@ -122,30 +135,38 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
             : { ...styles.tableHeader, backgroundColor: primaryColor }
     const customerBoxStyle = isMinimal
         ? { ...styles.customerBox, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0' }
-        : { ...styles.customerBox, backgroundColor: `${primaryColor}12` }
+        : isBold
+            ? { ...styles.customerBox, backgroundColor: `${accentColor}18`, borderLeftWidth: 3, borderLeftColor: accentColor }
+            : { ...styles.customerBox, backgroundColor: `${primaryColor}12` }
+    const terbilangStyle = isMinimal
+        ? { ...styles.terbilang, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e2e8f0', color: '#475569' }
+        : isBold
+            ? { ...styles.terbilang, backgroundColor: `${accentColor}1f`, color: accentColor }
+            : styles.terbilang
+    const grandTotalColor = isBold ? accentColor : primaryColor
 
     return (
         <Document>
             <Page size="A4" style={styles.page}>
                 <View style={headerStyle}>
                     <View>
-                        <Text style={[styles.title, { color: headerTextColor, fontSize: isBold ? 28 : isMinimal ? 22 : 24 }]}>INVOICE</Text>
+                        <Text style={[styles.title, titleStyle]}>INVOICE</Text>
                         <View style={{ marginTop: 10 }}>
                             <View style={styles.infoRow}>
-                                <Text style={[styles.infoLabel, { color: isMinimal ? '#64748b' : '#cbd5e1' }]}>No. Invoice:</Text>
+                                <Text style={[styles.infoLabel, { color: infoLabelColor }]}>No. Invoice:</Text>
                                 <Text style={[styles.infoValue, { color: headerTextColor }]}>{invoice.no_invoice}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={[styles.infoLabel, { color: isMinimal ? '#64748b' : '#cbd5e1' }]}>Tanggal:</Text>
+                                <Text style={[styles.infoLabel, { color: infoLabelColor }]}>Tanggal:</Text>
                                 <Text style={[styles.infoValue, { color: headerTextColor }]}>{formatDate(invoice.tanggal)}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={[styles.infoLabel, { color: isMinimal ? '#64748b' : '#cbd5e1' }]}>Jatuh Tempo:</Text>
+                                <Text style={[styles.infoLabel, { color: infoLabelColor }]}>Jatuh Tempo:</Text>
                                 <Text style={[styles.infoValue, { color: headerTextColor }]}>{formatDate(jatuhTempo)}</Text>
                             </View>
                             {invoice.no_po && (
                                 <View style={styles.infoRow}>
-                                    <Text style={[styles.infoLabel, { color: isMinimal ? '#64748b' : '#cbd5e1' }]}>No. PO:</Text>
+                                    <Text style={[styles.infoLabel, { color: infoLabelColor }]}>No. PO:</Text>
                                     <Text style={[styles.infoValue, { color: headerTextColor }]}>{invoice.no_po}</Text>
                                 </View>
                             )}
@@ -155,7 +176,7 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={[styles.sectionTitle, { color: primaryColor, borderBottomColor: `${primaryColor}40` }]}>Kepada Yth.</Text>
+                    <Text style={[styles.sectionTitle, sectionTitleStyle]}>Kepada Yth.</Text>
                     <View style={customerBoxStyle}>
                         <Text style={{ fontWeight: 'bold', marginBottom: 4 }}>{invoice.customer?.name}</Text>
                         <Text style={{ color: '#64748b' }}>{invoice.customer?.alamat || '-'}</Text>
@@ -195,9 +216,9 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
                             <Text style={styles.totalValue}>{formatCurrency(invoice.ppn_amount)}</Text>
                         </View>
                     )}
-                    <View style={[styles.totalRow, styles.grandTotal, { color: primaryColor, borderTopColor: primaryColor }]}>
+                    <View style={[styles.totalRow, styles.grandTotal, { color: grandTotalColor, borderTopColor: grandTotalColor }]}>
                         <Text style={styles.totalLabel}>TOTAL</Text>
-                        <Text style={[styles.totalValue, { color: primaryColor }]}>{formatCurrency(invoice.total)}</Text>
+                        <Text style={[styles.totalValue, { color: grandTotalColor }]}>{formatCurrency(invoice.total)}</Text>
                     </View>
                     {invoice.total_dibayar > 0 && (
                         <>
@@ -215,7 +236,7 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
                     )}
                 </View>
 
-                <View style={styles.terbilang}>
+                <View style={terbilangStyle}>
                     <Text>Terbilang: {terbilang(invoice.total_dibayar > 0 ? invoice.sisa_tagihan : invoice.total)}</Text>
                 </View>
 

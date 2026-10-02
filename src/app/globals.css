@@ -189,6 +189,67 @@ body {
 }
 
 /* ============================================
+   HIGHLIGHT / SPOTLIGHT (mengikuti kursor)
+   Aktif otomatis untuk `.surface` / `.surface-elevated` di dalam
+   container `.highlight-scope` yang dipasang di DashboardLayout,
+   sehingga seluruh halaman modul mendapat efek sorotan.
+   ============================================ */
+.highlight-scope .surface,
+.highlight-scope .surface-elevated {
+  position: relative;
+}
+
+.highlight-scope .surface::after,
+.highlight-scope .surface-elevated::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  background: radial-gradient(
+    320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    color-mix(in srgb, var(--brand-primary) 14%, transparent),
+    transparent 62%
+  );
+}
+
+.highlight-scope .surface:hover::after,
+.highlight-scope .surface-elevated:hover::after {
+  opacity: 1;
+}
+
+/* --- Glow per baris untuk kartu berisi tabel --- */
+/* Saat satu kartu memuat banyak baris, sorotan di seluruh kartu terasa sebagai
+   satu titik di tengah. Karena itu sorotan kartu dimatikan bila kartu memuat
+   tabel, lalu tiap baris mendapat sorotan sendiri yang mengikuti kursor. */
+.highlight-scope .surface:has(table)::after,
+.highlight-scope .surface-elevated:has(table)::after {
+  display: none;
+}
+
+@property --row-glow {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 0%;
+}
+
+.highlight-scope tbody tr {
+  background-image: radial-gradient(
+    220px 100% ellipse at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    color-mix(in srgb, var(--brand-primary) var(--row-glow), transparent),
+    transparent 70%
+  );
+  background-repeat: no-repeat;
+  transition: --row-glow 220ms ease;
+}
+
+.highlight-scope tbody tr:hover {
+  --row-glow: 7%;
+}
+
+/* ============================================
    BUTTON SYSTEM
    Setiap varian otomatis menyertakan base `.btn`
    sehingga shape (padding, radius, font) selalu konsisten

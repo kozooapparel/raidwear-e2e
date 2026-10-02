@@ -5,6 +5,7 @@ import { Profile } from '@/types/database'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useApplicationIdentity } from './AppIdentityProvider'
+import { HighlightGroup, Particles } from '@/components/ui/highlighter'
 
 interface DashboardLayoutProps {
     user: Profile | null
@@ -342,8 +343,18 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
                         </div>
                     </div>
                 )}
-                <div className={`${isMobile ? 'p-4' : 'p-5 lg:p-6'} w-full`}>
-                    {children}
+                <div className={`${isMobile ? 'p-4' : 'p-5 lg:p-6'} w-full relative isolate`}>
+                    {/* === PARTIKEL BRAND (dekorasi latar seluruh halaman modul) === */}
+                    <Particles
+                        className="absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,#000_88%,transparent)] opacity-70"
+                        quantity={120}
+                        color="#dc2626"
+                        vy={-0.15}
+                    />
+                    {/* Semua kartu `.surface` di dalamnya otomatis mendapat spotlight kursor */}
+                    <HighlightGroup>
+                        {children}
+                    </HighlightGroup>
                 </div>
             </main>
         </div>

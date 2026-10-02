@@ -158,39 +158,73 @@ export function KuitansiPDFDocument({ kuitansi, companyInfo }: KuitansiPDFProps)
     const templateId = kuitansi.template_id || brand?.default_kuitansi_template_id || companyInfo?.default_kuitansi_template_id || 'receipt_01'
     const isMinimal = templateId === 'receipt_02'
     const isCompact = templateId === 'receipt_03'
-    const headerStyle = isMinimal ? { ...styles.header, backgroundColor: '#ffffff', borderBottomWidth: 2, borderBottomColor: primaryColor } : isCompact ? { ...styles.header, backgroundColor: primaryColor, padding: 12, marginBottom: 10 } : { ...styles.header, backgroundColor: primaryColor }
-    const footerStyle = isMinimal ? { ...styles.footer, backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: primaryColor } : { ...styles.footer, backgroundColor: primaryColor }
-    const amountStyle = isCompact ? { ...styles.amountBox, padding: 10, marginBottom: 12 } : { ...styles.amountBox, backgroundColor: `${accentColor}25` }
+    // Formal (receipt_01): header & footer berwarna brand, kotak jumlah aksen.
+    // Minimal (receipt_02): header/footer putih bergaris, teks gelap, hemat tinta.
+    // Compact (receipt_03): header berwarna namun rapat & hemat ruang.
+    const headerStyle = isMinimal
+        ? { ...styles.header, backgroundColor: '#ffffff', borderBottomWidth: 2, borderBottomColor: primaryColor, padding: 16, marginBottom: 16 }
+        : isCompact
+            ? { ...styles.header, backgroundColor: primaryColor, padding: 12, marginBottom: 10 }
+            : { ...styles.header, backgroundColor: primaryColor }
+    const footerStyle = isMinimal
+        ? { ...styles.footer, backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: primaryColor }
+        : { ...styles.footer, backgroundColor: primaryColor }
+    const titleStyle = [
+        styles.title,
+        {
+            color: isMinimal ? primaryColor : 'white',
+            fontSize: isCompact ? 20 : 28,
+            letterSpacing: isCompact ? 2 : 4,
+        },
+    ]
+    const headerLabelStyle = [styles.headerLabel, { color: isMinimal ? '#64748b' : '#94a3b8' }]
+    const headerValueStyle = [styles.headerValue, { color: isMinimal ? '#1e293b' : 'white' }]
+    const footerTextStyle = { color: isMinimal ? '#334155' : 'white' }
+    const footerSubtextStyle = { color: isMinimal ? '#64748b' : '#94a3b8' }
+    const contentStyle = isCompact ? { ...styles.content, padding: 12 } : styles.content
+    const rowStyle = isCompact ? { ...styles.row, marginBottom: 10, paddingBottom: 10 } : styles.row
+    const terbilangRowStyle = isCompact ? { ...styles.terbilangRow, marginBottom: 10, paddingBottom: 10 } : styles.terbilangRow
+    const signatureAreaStyle = isCompact ? { ...styles.signatureArea, marginTop: 20 } : styles.signatureArea
+    const amountStyle = isMinimal
+        ? { ...styles.amountBox, backgroundColor: '#ffffff', borderWidth: 1, borderColor: primaryColor }
+        : isCompact
+            ? { ...styles.amountBox, backgroundColor: `${accentColor}25`, padding: 10, marginBottom: 12 }
+            : { ...styles.amountBox, backgroundColor: `${accentColor}25` }
+    const amountValueStyle = isMinimal
+        ? { ...styles.amountValue, color: primaryColor }
+        : isCompact
+            ? { ...styles.amountValue, fontSize: 16 }
+            : styles.amountValue
     return (
         <Document>
             <Page size="A4" style={styles.page}>
                 {/* Header */}
                 <View style={headerStyle}>
-                    <Text style={[styles.title, { color: isMinimal ? primaryColor : 'white' }]}>KUITANSI</Text>
+                    <Text style={titleStyle}>KUITANSI</Text>
                     <View style={styles.headerInfo}>
                         <View>
                             <View style={styles.headerRow}>
-                                <Text style={styles.headerLabel}>No. Kuitansi:</Text>
-                                <Text style={styles.headerValue}>{kuitansi.no_kuitansi}</Text>
+                                <Text style={headerLabelStyle}>No. Kuitansi:</Text>
+                                <Text style={headerValueStyle}>{kuitansi.no_kuitansi}</Text>
                             </View>
                             <View style={styles.headerRow}>
-                                <Text style={styles.headerLabel}>Tanggal:</Text>
-                                <Text style={styles.headerValue}>{formatDate(kuitansi.tanggal)}</Text>
+                                <Text style={headerLabelStyle}>Tanggal:</Text>
+                                <Text style={headerValueStyle}>{formatDate(kuitansi.tanggal)}</Text>
                             </View>
                         </View>
                         <View>
                             <View style={styles.headerRow}>
-                                <Text style={styles.headerLabel}>No. Invoice:</Text>
-                                <Text style={styles.headerValue}>{kuitansi.invoice?.no_invoice}</Text>
+                                <Text style={headerLabelStyle}>No. Invoice:</Text>
+                                <Text style={headerValueStyle}>{kuitansi.invoice?.no_invoice}</Text>
                             </View>
                         </View>
                     </View>
                 </View>
 
                 {/* Content */}
-                <View style={styles.content}>
+                <View style={contentStyle}>
                     {/* Sudah diterima dari */}
-                    <View style={styles.row}>
+                    <View style={rowStyle}>
                         <View style={styles.label}>
                             <Text style={styles.labelTitle}>Sudah diterima dari</Text>
                             <Text style={styles.labelSubtitle}>Received from</Text>
@@ -200,11 +234,11 @@ export function KuitansiPDFDocument({ kuitansi, companyInfo }: KuitansiPDFProps)
 
                     {/* Jumlah */}
                     <View style={amountStyle}>
-                        <Text style={styles.amountValue}>Rp {formatCurrency(kuitansi.jumlah).replace('Rp', '').trim()}</Text>
+                        <Text style={amountValueStyle}>Rp {formatCurrency(kuitansi.jumlah).replace('Rp', '').trim()}</Text>
                     </View>
 
                     {/* Terbilang */}
-                    <View style={styles.terbilangRow}>
+                    <View style={terbilangRowStyle}>
                         <View style={styles.terbilangLabel}>
                             <Text style={[styles.labelTitle, { color: primaryColor }]}>Terbilang</Text>
                             <Text style={styles.labelSubtitle}>Amount in words</Text>
@@ -213,7 +247,7 @@ export function KuitansiPDFDocument({ kuitansi, companyInfo }: KuitansiPDFProps)
                     </View>
 
                     {/* Untuk Pembayaran */}
-                    <View style={styles.row}>
+                    <View style={rowStyle}>
                         <View style={styles.label}>
                             <Text style={[styles.labelTitle, { color: primaryColor }]}>Untuk Pembayaran</Text>
                             <Text style={styles.labelSubtitle}>In Payment of</Text>
@@ -222,7 +256,7 @@ export function KuitansiPDFDocument({ kuitansi, companyInfo }: KuitansiPDFProps)
                     </View>
 
                     {/* Signature */}
-                    <View style={styles.signatureArea}>
+                    <View style={signatureAreaStyle}>
                         <View style={styles.signatureBox}>
                             <Text style={styles.signatureLocation}>
                                 {kuitansi.lokasi || 'Bandung'}, {formatDate(kuitansi.tanggal)}
@@ -235,9 +269,9 @@ export function KuitansiPDFDocument({ kuitansi, companyInfo }: KuitansiPDFProps)
 
                 {/* Footer */}
                 <View style={footerStyle}>
-                    <Text style={[styles.footerText, { fontWeight: 'bold', marginBottom: 3 }]}>{displayName}</Text>
-                    <Text style={styles.footerText}>Kuitansi ini berlaku sah, setelah uang diterima.</Text>
-                    <Text style={styles.footerSubtext}>This payment will be legal, if the cheque has been accepted by the bank</Text>
+                    <Text style={[styles.footerText, footerTextStyle, { fontWeight: 'bold', marginBottom: 3 }]}>{displayName}</Text>
+                    <Text style={[styles.footerText, footerTextStyle]}>Kuitansi ini berlaku sah, setelah uang diterima.</Text>
+                    <Text style={[styles.footerSubtext, footerSubtextStyle]}>This payment will be legal, if the cheque has been accepted by the bank</Text>
                 </View>
             </Page>
         </Document>

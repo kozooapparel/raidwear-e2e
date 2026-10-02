@@ -187,7 +187,7 @@ export async function createInvoice(
     const { data: brand } = finalBrandId
         ? await supabase
             .from('brands')
-            .select('default_invoice_template_id')
+            .select('default_invoice_template_id, default_kuitansi_template_id')
             .eq('id', finalBrandId)
             .single()
         : { data: null }
@@ -258,6 +258,7 @@ export async function createInvoice(
                 invoice_id: invoice.id,
                 tanggal: new Date().toISOString().split('T')[0],
                 jumlah: orderData.dp_desain_amount,
+                template_id: brand?.default_kuitansi_template_id || 'receipt_01',
                 keterangan: `Pembayaran Deposit Desain - ${noInvoice}`,
                 created_by: user?.id
             })

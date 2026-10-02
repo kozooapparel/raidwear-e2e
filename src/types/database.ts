@@ -504,6 +504,7 @@ export type Database = {
                     lokasi?: string
                     created_by?: string | null
                     created_at?: string
+                    template_id?: string | null
                 }
                 Update: {
                     id?: string
