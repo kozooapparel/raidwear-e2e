@@ -227,8 +227,11 @@ export default function KanbanBoard({
                     }
                     break
                 case 'proses_layout':
-                    if (!order.layout_completed) {
-                        return { allowed: false, reason: 'Selesaikan Layout terlebih dahulu' }
+                    // ACC layout dari customer adalah syarat utama. Tanda selesai
+                    // manual admin tetap diterima sebagai jalan keluar agar order
+                    // lama tidak terkunci saat dimundurkan ke tahap ini.
+                    if (!order.layout_approved_at && !order.layout_completed) {
+                        return { allowed: false, reason: 'Layout belum disetujui customer' }
                     }
                     break
                 case 'dp_produksi':
@@ -276,6 +279,19 @@ export default function KanbanBoard({
         setActiveId(String(event.active.id))
     }
 
+    /**
+     * Menentukan stage tujuan dari id yang di-drop.
+     *
+     * Kolom droppable memakai id stage, sedangkan kartu memakai id order. Saat
+     * kartu dijatuhkan tepat di atas kartu lain, `over.id` berisi id order —
+     * tanpa pemetaan ini stage tujuan akan salah (berisi UUID order).
+     */
+    const resolveTargetStage = (overId: string): OrderStage | null => {
+        if (STAGES_ORDER.includes(overId as OrderStage)) return overId as OrderStage
+        const overOrder = orders.find(o => o.id === overId)
+        return overOrder ? overOrder.stage : null
+    }
+
     // Handle drag end - update order stage
     const handleDragEnd = async (event: DragEndEvent) => {
         const { active, over } = event
@@ -284,10 +300,10 @@ export default function KanbanBoard({
         if (!over) return
 
         const orderId = String(active.id)
-        const targetStage = over.id as OrderStage
+        const targetStage = resolveTargetStage(String(over.id))
 
         const order = orders.find(o => o.id === orderId)
-        if (!order) return
+        if (!order || !targetStage) return
 
         if (order.stage === targetStage) return
 

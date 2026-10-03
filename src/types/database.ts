@@ -185,6 +185,12 @@ export type Database = {
                     brand_id: string | null
                     // Design notes
                     design_notes: string | null
+                    // Customer portal
+                    portal_token: string | null
+                    layout_preview_url: string | null
+                    layout_approved_at: string | null
+                    layout_revision_note: string | null
+                    layout_revision_requested_at: string | null
                     // Archive
                     is_archived: boolean
                     tenant_id: string
@@ -227,6 +233,12 @@ export type Database = {
                     brand_id?: string | null
                     // Design notes
                     design_notes?: string | null
+                    // Customer portal
+                    portal_token?: string | null
+                    layout_preview_url?: string | null
+                    layout_approved_at?: string | null
+                    layout_revision_note?: string | null
+                    layout_revision_requested_at?: string | null
                     // Archive
                     is_archived?: boolean
                     tenant_id?: string
@@ -276,6 +288,12 @@ export type Database = {
                     brand_id?: string | null
                     // Design notes
                     design_notes?: string | null
+                    // Customer portal
+                    portal_token?: string | null
+                    layout_preview_url?: string | null
+                    layout_approved_at?: string | null
+                    layout_revision_note?: string | null
+                    layout_revision_requested_at?: string | null
                     // Archive
                     is_archived?: boolean
                     tenant_id?: string
@@ -563,6 +581,18 @@ export type Database = {
             delete_order_permanently: {
                 Args: { p_order_id: string }
                 Returns: undefined
+            }
+            get_portal_order: {
+                Args: { p_token: string }
+                Returns: Json
+            }
+            approve_portal_layout: {
+                Args: { p_token: string }
+                Returns: Json
+            }
+            request_portal_layout_revision: {
+                Args: { p_token: string; p_note: string }
+                Returns: Json
             }
         }
         Enums: {}

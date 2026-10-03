@@ -23,12 +23,14 @@ export function getOrderStageReadiness(
                 : { isReady: false, label: 'Belum Bayar' }
         case 'proses_desain':
             return order.mockup_url
-                ? { isReady: true, label: 'Sudah ACC' }
-                : { isReady: false, label: 'Belum ACC' }
+                ? { isReady: true, label: 'Mockup Siap' }
+                : { isReady: false, label: 'Belum Mockup' }
         case 'proses_layout':
-            return order.layout_completed
-                ? { isReady: true, label: 'Selesai' }
-                : { isReady: false, label: 'Belum Selesai' }
+            // ACC customer atas layout adalah penanda selesainya tahap ini. Unggahan file
+            // cetak tetap disarankan, tetapi tidak lagi menahan perpindahan tahap.
+            return order.layout_approved_at
+                ? { isReady: true, label: 'ACC Layout' }
+                : { isReady: false, label: 'Menunggu ACC' }
         case 'dp_produksi':
             if (!hasInvoice) return { isReady: false, label: 'Belum Invoice' }
             if (!order.dp_produksi_verified) return { isReady: false, label: 'Belum DP' }

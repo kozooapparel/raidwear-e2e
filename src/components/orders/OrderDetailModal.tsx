@@ -9,7 +9,7 @@ import { toast } from 'sonner'
 import { FormOrderEditor, FormOrderDownloadButton } from '@/components/form-order'
 import { hasFormOrderData } from '@/lib/form-order'
 import { getOrderStageReadiness } from '@/lib/order-stage-readiness'
-import { ImageDropzone, CurrencyInput, ConfirmDialog } from '@/components/ui'
+import { ImageDropzone, CurrencyInput, ConfirmDialog, validateImageFile } from '@/components/ui'
 import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder } from '@/lib/actions/orders'
 
 type OrderDetailTab = 'detail' | 'payment' | 'stage' | 'form-order'
@@ -45,6 +45,42 @@ function formatFileSize(bytes: number) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
     return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
+}
+
+/**
+ * Menyalin teks ke clipboard.
+ *
+ * Clipboard API hanya tersedia pada secure context (https atau localhost).
+ * Bila dashboard dibuka lewat http di jaringan lokal, API tersebut tidak ada
+ * sehingga dipakai fallback textarea + execCommand.
+ */
+async function copyTextToClipboard(text: string): Promise<boolean> {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(text)
+            return true
+        } catch {
+            // Clipboard API bisa ditolak; lanjut ke fallback di bawah.
+        }
+    }
+
+    try {
+        const textarea = document.createElement('textarea')
+        textarea.value = text
+        textarea.setAttribute('readonly', '')
+        textarea.style.position = 'fixed'
+        textarea.style.top = '-9999px'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        textarea.setSelectionRange(0, text.length)
+        const succeeded = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        return succeeded
+    } catch {
+        return false
+    }
 }
 
 async function storageRequest<T>(url: string, init?: RequestInit): Promise<T> {
@@ -106,6 +142,11 @@ export default function OrderDetailModal({
     const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
     const [showDeleteMockupConfirm, setShowDeleteMockupConfirm] = useState(false)
     const [deletingMockup, setDeletingMockup] = useState(false)
+    // Konfirmasi sebelum memundurkan order ke tahap sebelumnya
+    const [showMoveBackConfirm, setShowMoveBackConfirm] = useState(false)
+    const [showDeleteLayoutPreviewConfirm, setShowDeleteLayoutPreviewConfirm] = useState(false)
+    const [deletingLayoutPreview, setDeletingLayoutPreview] = useState(false)
+    const [portalLinkCopied, setPortalLinkCopied] = useState(false)
     const [editingDP, setEditingDP] = useState<'dp_desain' | 'dp_produksi' | 'pelunasan' | null>(null)
     const [editDPAmount, setEditDPAmount] = useState('')
     const [savingCorrection, setSavingCorrection] = useState(false)
@@ -114,6 +155,7 @@ export default function OrderDetailModal({
     const [layoutUploadProgress, setLayoutUploadProgress] = useState<number | null>(null)
     const [layoutBusy, setLayoutBusy] = useState<string | null>(null)
     const layoutFileInputRef = useRef<HTMLInputElement>(null)
+    const mockupFileInputRef = useRef<HTMLInputElement>(null)
     const wasOpenRef = useRef(false)
     const [layoutFileToDelete, setLayoutFileToDelete] = useState<LayoutFile | null>(null)
     const [showDeleteLayoutLinkConfirm, setShowDeleteLayoutLinkConfirm] = useState(false)
@@ -469,7 +511,7 @@ export default function OrderDetailModal({
             }
 
             toast.success('Desain berhasil diupload!', { id: toastId })
-            await syncLatestOrder({ close: true })
+            await syncLatestOrder()
         } catch (err) {
             console.error('Upload error:', err)
             const message = err instanceof Error ? err.message : 'Unknown error'
@@ -528,6 +570,124 @@ export default function OrderDetailModal({
         }
     }
 
+    // Handle ganti mockup dari tab Detail — validasi lalu pakai alur upload yang sama.
+    const handleMockupFileSelect = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        // Reset supaya memilih file yang sama lagi tetap memicu onChange
+        event.target.value = ''
+        if (!file) return
+
+        const validationError = validateImageFile(file)
+        if (validationError) {
+            toast.error(validationError)
+            return
+        }
+
+        void handleMockupUpload(file)
+    }
+
+    // Handle upload gambar layout (pratinjau ACC customer) — hanya gambar, bukan file cetak.
+    // Gambar ini yang ditampilkan di portal customer untuk disetujui.
+    const handleLayoutPreviewUpload = async (file: File) => {
+        setLoading(true)
+        const toastId = toast.loading('Mengupload gambar layout...')
+        try {
+            const fileExt = (file.name.split('.').pop() || 'png').toLowerCase()
+            const filePath = `layouts/${order.id}/${Date.now()}.${fileExt}`
+
+            const { error: uploadError } = await supabase.storage
+                .from('order-assets')
+                .upload(filePath, file, { contentType: file.type, upsert: false })
+
+            if (uploadError) {
+                console.error('Storage error:', uploadError)
+                toast.error(`Gagal upload: ${uploadError.message}`, { id: toastId })
+                return
+            }
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('order-assets')
+                .getPublicUrl(filePath)
+
+            // Gambar layout baru membatalkan ACC sebelumnya: customer harus menyetujui ulang.
+            const { error: updateError } = await supabase
+                .from('orders')
+                .update({
+                    layout_preview_url: publicUrl,
+                    layout_approved_at: null,
+                    layout_revision_note: null,
+                    layout_revision_requested_at: null,
+                })
+                .eq('id', order.id)
+
+            if (updateError) {
+                console.error('Update error:', updateError)
+                toast.error(`Gagal update: ${updateError.message}`, { id: toastId })
+                return
+            }
+
+            toast.success('Gambar layout berhasil diupload!', { id: toastId })
+            await syncLatestOrder()
+        } catch (err) {
+            console.error('Upload error:', err)
+            const message = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Gagal upload gambar layout: ${message}`, { id: toastId })
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Handle hapus gambar layout — buang file dari storage lalu kosongkan layout_preview_url
+    const handleDeleteLayoutPreview = async () => {
+        if (!order.layout_preview_url) return
+
+        setDeletingLayoutPreview(true)
+        const toastId = toast.loading('Menghapus gambar layout...')
+        try {
+            const marker = '/order-assets/'
+            const markerIndex = order.layout_preview_url.indexOf(marker)
+            const filePath = markerIndex !== -1
+                ? decodeURIComponent(order.layout_preview_url.slice(markerIndex + marker.length))
+                : null
+
+            const { error: updateError } = await supabase
+                .from('orders')
+                .update({
+                    layout_preview_url: null,
+                    layout_approved_at: null,
+                    layout_revision_note: null,
+                    layout_revision_requested_at: null,
+                })
+                .eq('id', order.id)
+
+            if (updateError) {
+                console.error('Update error:', updateError)
+                toast.error(`Gagal menghapus: ${updateError.message}`, { id: toastId })
+                return
+            }
+
+            if (filePath) {
+                const { error: removeError } = await supabase.storage
+                    .from('order-assets')
+                    .remove([filePath])
+
+                if (removeError) {
+                    console.error('Storage remove error:', removeError)
+                }
+            }
+
+            toast.success('Gambar layout berhasil dihapus', { id: toastId })
+            setShowDeleteLayoutPreviewConfirm(false)
+            await syncLatestOrder()
+        } catch (err) {
+            console.error('Delete layout preview error:', err)
+            const message = err instanceof Error ? err.message : 'Unknown error'
+            toast.error(`Gagal menghapus gambar layout: ${message}`, { id: toastId })
+        } finally {
+            setDeletingLayoutPreview(false)
+        }
+    }
+
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
@@ -554,9 +714,35 @@ export default function OrderDetailModal({
         return null
     }
 
+    // Get previous stage in sequence (untuk mengoreksi salah pindah tahap)
+    const getPreviousStage = (): OrderStage | null => {
+        const currentIndex = STAGES_ORDER.indexOf(order.stage)
+        if (currentIndex > 0) {
+            return STAGES_ORDER[currentIndex - 1]
+        }
+        return null
+    }
+
     // Manual completion stages that require admin checkbox confirmation
     const MANUAL_STAGES: OrderStage[] = ['proses_layout', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing']
     const isManualStage = MANUAL_STAGES.includes(order.stage as OrderStage)
+
+    // Status tombol toggle tahap manual, mengikuti field yang memang diubah tombol ini.
+    // Berbeda dari isReady: proses_layout juga butuh ACC customer, jadi isReady baru
+    // bernilai true setelah layout disetujui — sementara tombol ini menandai layout_completed.
+    const isManualStageComplete = (): boolean => {
+        switch (order.stage as OrderStage) {
+            case 'proses_layout': return order.layout_completed || Boolean(order.layout_approved_at)
+            case 'antrean_produksi': return order.production_ready
+            case 'print_press': return order.print_completed
+            case 'cutting_jahit': return order.sewing_completed
+            case 'packing': return order.packing_completed
+            default: return false
+        }
+    }
+
+    // Bila customer sudah ACC layout, tahap dianggap selesai dan tidak bisa dibatalkan manual.
+    const layoutApprovedByCustomer = order.stage === 'proses_layout' && Boolean(order.layout_approved_at)
 
     // Check if can move to next stage - must complete current stage first
     const canMoveToNextStage = () => {
@@ -567,7 +753,9 @@ export default function OrderDetailModal({
             case 'proses_desain':
                 return order.mockup_url !== null && getNextStage() !== null
             case 'proses_layout':
-                return order.layout_completed && getNextStage() !== null
+                // ACC customer adalah syarat utama. Tanda selesai manual admin
+                // tetap diterima agar order lama tidak terkunci setelah dimundurkan.
+                return (Boolean(order.layout_approved_at) || order.layout_completed) && getNextStage() !== null
             case 'dp_produksi':
                 // Require invoice AND DP verified to move from DP Produksi
                 return order.dp_produksi_verified && orderInvoice !== null && getNextStage() !== null
@@ -612,6 +800,7 @@ export default function OrderDetailModal({
     // Handle stage transition with auto-SPK generation
     const handleMoveToNextStage = async () => {
         const nextStage = getNextStage()
+
         if (!nextStage) return
 
         // Validate form order filled before moving OUT of antrean_produksi
@@ -640,6 +829,39 @@ export default function OrderDetailModal({
             console.error('Move stage error:', err)
             const message = err instanceof Error ? err.message : 'Gagal pindah stage'
             toast.error(message)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Mundur satu tahap untuk mengoreksi salah pindah.
+    //
+    // Sengaja TIDAK menghasilkan efek samping apa pun: SPK, pembayaran, file,
+    // dan persetujuan layout dibiarkan apa adanya supaya tidak bentrok dengan
+    // data yang sudah tercatat. Hanya posisi stage & waktunya yang diubah.
+    const handleMoveToPreviousStage = async () => {
+        const previousStage = getPreviousStage()
+        if (!previousStage) return
+
+        setLoading(true)
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({
+                    stage: previousStage,
+                    stage_entered_at: new Date().toISOString()
+                })
+                .eq('id', order.id)
+
+            if (error) throw error
+
+            toast.success(`Order dikembalikan ke ${STAGE_LABELS[previousStage]}`)
+            setShowMoveBackConfirm(false)
+            // Tetap buka modal agar admin bisa langsung melanjutkan koreksi.
+            await syncLatestOrder()
+        } catch (err) {
+            console.error('Move back stage error:', err)
+            toast.error('Gagal memindahkan ke stage sebelumnya')
         } finally {
             setLoading(false)
         }
@@ -699,6 +921,24 @@ export default function OrderDetailModal({
     }
 
     const nextStage = getNextStage()
+    const previousStage = getPreviousStage()
+
+    // Salin link portal customer agar bisa dikirim ke pelanggan.
+    const handleCopyPortalLink = async () => {
+        if (!order?.portal_token) {
+            toast.error('Order ini belum memiliki token portal')
+            return
+        }
+        const link = `${window.location.origin}/lacak/${order.portal_token}`
+        const copied = await copyTextToClipboard(link)
+        if (!copied) {
+            toast.error('Gagal menyalin link portal')
+            return
+        }
+        setPortalLinkCopied(true)
+        setTimeout(() => setPortalLinkCopied(false), 2000)
+        toast.success('Link portal disalin')
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -720,6 +960,23 @@ export default function OrderDetailModal({
                             }`}>
                             {STAGE_LABELS[order.stage]}
                         </span>
+                        <button
+                            onClick={handleCopyPortalLink}
+                            className="p-2 rounded-lg hover:bg-brand-500/10 text-brand-600 hover:text-brand-700"
+                            title="Salin Link Portal"
+                            aria-label="Salin link portal customer"
+                        >
+                            {portalLinkCopied ? (
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                            ) : (
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <rect x="9" y="9" width="12" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                                </svg>
+                            )}
+                        </button>
                         <button
                             onClick={() => setShowArchiveConfirm(true)}
                             className="p-2 rounded-lg hover:bg-amber-100 text-amber-600 hover:text-amber-700"
@@ -835,9 +1092,16 @@ export default function OrderDetailModal({
                                 </div>
                             )}
 
-                            {/* Mockup Preview - Only show mockup image */}
+                            {/* Mockup Preview - tampilkan gambar + kontrol ganti/hapus di semua tahap */}
                             {order.mockup_url && (
                                 <div className="space-y-2">
+                                    <input
+                                        ref={mockupFileInputRef}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                                        className="hidden"
+                                        onChange={handleMockupFileSelect}
+                                    />
                                     <div
                                         className="relative w-full h-48 rounded-xl overflow-hidden bg-slate-100 cursor-zoom-in hover:opacity-95 transition-opacity"
                                         onClick={() => setPreviewImage(order.mockup_url)}
@@ -851,6 +1115,40 @@ export default function OrderDetailModal({
                                         {/* Label Badge */}
                                         <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium">
                                             Mockup Desain
+                                        </div>
+                                        {/* Kontrol ganti/hapus mockup — bisa dipakai di tahap mana pun */}
+                                        <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    mockupFileInputRef.current?.click()
+                                                }}
+                                                disabled={loading}
+                                                title="Ganti mockup"
+                                                aria-label="Ganti mockup"
+                                                className="flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm hover:bg-black/75 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                                Ganti
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setShowDeleteMockupConfirm(true)
+                                                }}
+                                                disabled={deletingMockup || loading}
+                                                title="Hapus mockup"
+                                                aria-label="Hapus mockup"
+                                                className="rounded-md bg-red-500/90 p-1.5 text-white backdrop-blur-sm hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -1391,24 +1689,29 @@ export default function OrderDetailModal({
                     {/* Stage Tab */}
                     {activeTab === 'stage' && (
                         <div className="space-y-4">
-                            {/* Current Stage */}
-                            <div className={`p-4 rounded-xl ${isReady
-                                ? 'bg-emerald-500/10 border border-emerald-500/30'
-                                : 'bg-red-500/10 border border-red-500/30'
-                                }`}>
-                                <p className="text-xs text-slate-500 mb-1">Stage Saat Ini</p>
-                                <p className={`text-xl font-bold ${isReady ? 'text-emerald-500' : 'text-red-500'}`}>
-                                    {STAGE_LABELS[order.stage]}
-                                </p>
-                            </div>
-
-                            {/* Next Stage */}
-                            {nextStage && (
-                                <div className="p-4 rounded-xl bg-slate-50">
-                                    <p className="text-xs text-slate-500 mb-1">Stage Berikutnya</p>
-                                    <p className="text-xl font-bold text-slate-900">{STAGE_LABELS[nextStage]}</p>
+                            {/* Stage saat ini & berikutnya digabung agar ringkas */}
+                            <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-slate-500">Stage Saat Ini</p>
+                                        <p className="text-lg font-semibold text-slate-900 truncate">
+                                            {STAGE_LABELS[order.stage]}
+                                        </p>
+                                    </div>
+                                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium ${isReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {isReady ? 'Siap lanjut' : 'Belum selesai'}
+                                    </span>
                                 </div>
-                            )}
+                                {nextStage && (
+                                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-sm">
+                                        <span className="text-slate-500 shrink-0">Berikutnya</span>
+                                        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                        </svg>
+                                        <span className="font-medium text-slate-700 truncate">{STAGE_LABELS[nextStage]}</span>
+                                    </div>
+                                )}
+                            </div>
 
                             {/* Invoice & DP Status Checklist for dp_produksi stage */}
                             {order.stage === 'dp_produksi' && (
@@ -1649,6 +1952,65 @@ export default function OrderDetailModal({
                                 </div>
                             )}
 
+                            {/* Gambar Layout — pratinjau yang di-ACC customer di portal */}
+                            {['proses_layout', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
+                                <div className="border border-slate-200 rounded-xl p-4 bg-white">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <svg className="w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                            <p className="text-sm font-medium text-slate-900">
+                                                Gambar Layout (ACC Customer)
+                                            </p>
+                                        </div>
+                                        {order.layout_approved_at ? (
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">✓ Disetujui</span>
+                                        ) : order.layout_preview_url ? (
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Menunggu ACC</span>
+                                        ) : (
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-500">Belum ada</span>
+                                        )}
+                                    </div>
+
+                                    <p className="text-xs text-slate-500 mb-3">
+                                        Gambar ini ditampilkan ke customer di portal untuk disetujui. Upload gambar pratinjau layout (JPG/PNG).
+                                    </p>
+
+                                    {order.layout_preview_url && (
+                                        <div className="relative w-full h-40 rounded-lg overflow-hidden bg-slate-50 mb-3">
+                                            <div
+                                                className="absolute inset-0 cursor-zoom-in hover:opacity-95 transition-opacity"
+                                                onClick={() => setPreviewImage(order.layout_preview_url)}
+                                            >
+                                                <Image src={order.layout_preview_url} alt="Gambar layout" fill className="object-contain" />
+                                            </div>
+                                            <div className="absolute top-2 right-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowDeleteLayoutPreviewConfirm(true)}
+                                                    disabled={deletingLayoutPreview || loading}
+                                                    title="Hapus gambar layout"
+                                                    aria-label="Hapus gambar layout"
+                                                    className="p-1.5 rounded bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <ImageDropzone
+                                        onFileSelect={handleLayoutPreviewUpload}
+                                        onError={(message) => toast.error(message)}
+                                        disabled={loading}
+                                        label={order.layout_preview_url ? 'Ganti gambar layout' : 'Upload gambar layout'}
+                                    />
+                                </div>
+                            )}
+
                             {/* Design Gatekeeper Warning for proses_desain */}
                             {order.stage === 'proses_desain' && !order.mockup_url && (
                                 <div className="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3">
@@ -1657,21 +2019,45 @@ export default function OrderDetailModal({
                                     </svg>
                                     <div>
                                         <p className="text-brand-600 font-medium">Desain belum diupload</p>
-                                        <p className="text-sm text-slate-500">Upload desain yang sudah di-ACC customer untuk pindah ke DP Produksi</p>
+                                        <p className="text-sm text-slate-500">Upload desain final untuk pindah ke DP Produksi</p>
                                     </div>
                                 </div>
                             )}
 
-                            {/* Upload desain: di stage proses_desain, atau di stage manapun bila desain sudah ada (agar salah upload bisa diperbaiki) */}
-                            {(order.stage === 'proses_desain' || order.mockup_url) && (
+                            {/* Status respons customer dari portal */}
+                            {order.layout_approved_at && (
+                                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">
+                                    <svg className="w-6 h-6 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-emerald-700 font-medium">Layout disetujui customer</p>
+                                        <p className="text-sm text-slate-500">
+                                            Disetujui via portal pada {formatDate(order.layout_approved_at)}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!order.layout_approved_at && order.layout_revision_requested_at && (
+                                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
+                                    <svg className="w-6 h-6 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.16 16.25A2 2 0 005 19z" />
+                                    </svg>
+                                    <div>
+                                        <p className="text-amber-700 font-medium">Customer meminta revisi layout</p>
+                                        <p className="text-sm text-slate-500">
+                                            {order.layout_revision_note || 'Tanpa catatan'} • {formatDate(order.layout_revision_requested_at)}
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Upload desain final hanya di tahap desain. Di tahap lanjutan,
+                                mockup bisa diganti lewat kontrol di tab Detail. */}
+                            {order.stage === 'proses_desain' && (
                                 <div className="p-4 rounded-xl bg-slate-50 space-y-3">
                                     <p className="text-sm font-medium text-slate-900">Upload Desain Final</p>
-
-                                    {order.stage !== 'proses_desain' && (
-                                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                            Order sudah lewat tahap desain. Mengganti atau menghapus desain di sini bisa berdampak ke produksi yang sedang berjalan.
-                                        </p>
-                                    )}
 
                                     {order.mockup_url && (
                                         <div className="relative w-full h-40 rounded-lg overflow-hidden bg-white">
@@ -1770,11 +2156,24 @@ export default function OrderDetailModal({
 
                             {/* Manual Stage Completion Toggle */}
                             {isManualStage && nextStage && (
-                                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                                    <p className="text-sm font-medium text-slate-900 mb-3">
-                                        Status Proses {STAGE_LABELS[order.stage]}
-                                    </p>
+                                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-slate-900">
+                                            {layoutApprovedByCustomer ? 'Tahap selesai' : 'Tandai tahap selesai'}
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            {layoutApprovedByCustomer
+                                                ? 'Otomatis dari ACC layout customer'
+                                                : isManualStageComplete()
+                                                    ? 'Sudah ditandai selesai'
+                                                    : 'Aktifkan bila tahap ini sudah dikerjakan'}
+                                        </p>
+                                    </div>
                                     <button
+                                        type="button"
+                                        role="switch"
+                                        aria-checked={layoutApprovedByCustomer || isManualStageComplete()}
+                                        aria-label="Tandai tahap selesai"
                                         onClick={async () => {
                                             setLoading(true)
                                             try {
@@ -1823,7 +2222,9 @@ export default function OrderDetailModal({
                                                     .eq('id', order.id)
 
                                                 if (error) throw error
-                                                await syncLatestOrder({ close: true })
+                                                // Refresh di tempat tanpa menutup modal agar admin
+                                                // bisa lanjut kerja tanpa membuka order lagi.
+                                                await syncLatestOrder()
                                             } catch (err) {
                                                 console.error('Toggle stage error:', err)
                                                 toast.error('Gagal mengupdate status')
@@ -1831,57 +2232,61 @@ export default function OrderDetailModal({
                                                 setLoading(false)
                                             }
                                         }}
-                                        disabled={loading}
-                                        className={`w-full py-3 px-4 rounded-xl font-medium transition-all flex items-center justify-center gap-2 border-2 ${isReady
-                                            ? 'border-emerald-500 text-emerald-600 bg-emerald-50 hover:bg-emerald-100'
-                                            : 'border-red-400 text-red-500 bg-red-50 hover:bg-red-100'
-                                            } disabled:opacity-50`}
+                                        disabled={loading || layoutApprovedByCustomer}
+                                        className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'bg-emerald-500' : 'bg-slate-300'
+                                            }`}
                                     >
-                                        {loading ? (
-                                            <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                            </svg>
-                                        ) : isReady ? (
-                                            <>
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                </svg>
-                                                Selesai - Klik untuk batalkan
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                Belum Selesai - Klik untuk tandai selesai
-                                            </>
-                                        )}
+                                        <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'translate-x-5' : ''
+                                            }`} />
                                     </button>
                                 </div>
                             )}
 
-                            {/* Move Button */}
-                            {nextStage && (
-                                <button
-                                    onClick={handleMoveToNextStage}
-                                    disabled={loading || !canMoveToNextStage()}
-                                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-brand-500 to-brand-600 text-white font-semibold hover:from-brand-600 hover:to-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                                >
-                                    {loading ? (
-                                        <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                        </svg>
-                                    ) : (
+                            {/* Aksi perpindahan tahap */}
+                            {(nextStage || previousStage) && (
+                                <div className="space-y-1 pt-1">
+                                    {nextStage && (
                                         <>
-                                            Pindah ke {STAGE_LABELS[nextStage]}
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                            </svg>
+                                            <button
+                                                onClick={handleMoveToNextStage}
+                                                disabled={loading || !canMoveToNextStage()}
+                                                className="w-full py-3 px-4 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                            >
+                                                {loading ? (
+                                                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                    </svg>
+                                                ) : (
+                                                    <>
+                                                        Pindah ke {STAGE_LABELS[nextStage]}
+                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                                        </svg>
+                                                    </>
+                                                )}
+                                            </button>
+                                            {!canMoveToNextStage() && (
+                                                <p className="text-xs text-center text-slate-500 pt-1">
+                                                    {getOrderStageReadiness(order, { hasInvoice: orderInvoice !== null }).label} — lengkapi dulu untuk pindah
+                                                </p>
+                                            )}
                                         </>
                                     )}
-                                </button>
+
+                                    {previousStage && (
+                                        <button
+                                            onClick={() => setShowMoveBackConfirm(true)}
+                                            disabled={loading}
+                                            className="w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                                            </svg>
+                                            Kembali ke {STAGE_LABELS[previousStage]}
+                                        </button>
+                                    )}
+                                </div>
                             )}
 
                             {order.stage === 'pengiriman' && (
@@ -1966,6 +2371,23 @@ export default function OrderDetailModal({
                 </div>
             )}
 
+            {/* Move Back Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showMoveBackConfirm}
+                onClose={() => setShowMoveBackConfirm(false)}
+                onConfirm={handleMoveToPreviousStage}
+                title={`Kembalikan ke ${previousStage ? STAGE_LABELS[previousStage] : 'tahap sebelumnya'}?`}
+                description="Order akan dipindah ke tahap sebelumnya. Pembayaran, SPK, file, dan persetujuan yang sudah ada tetap tersimpan."
+                confirmText="Ya, Kembalikan"
+                tone="brand"
+                loading={loading}
+                icon={
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
+                    </svg>
+                }
+            />
+
             {/* Delete Confirmation Dialog */}
             <ConfirmDialog
                 isOpen={showDeleteConfirm}
@@ -2038,6 +2460,17 @@ export default function OrderDetailModal({
                 description="File akan dihapus permanen dan order dianggap belum punya desain."
                 confirmText="Ya, Hapus"
                 loading={deletingMockup}
+            />
+
+            {/* Konfirmasi hapus gambar layout */}
+            <ConfirmDialog
+                isOpen={showDeleteLayoutPreviewConfirm}
+                onClose={() => setShowDeleteLayoutPreviewConfirm(false)}
+                onConfirm={handleDeleteLayoutPreview}
+                title="Hapus Gambar Layout?"
+                description="Gambar pratinjau layout akan dihapus permanen dan customer tidak bisa lagi melihat layout ini di portal."
+                confirmText="Ya, Hapus"
+                loading={deletingLayoutPreview}
             />
         </div >
     )
