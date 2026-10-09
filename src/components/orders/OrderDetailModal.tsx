@@ -409,6 +409,18 @@ export default function OrderDetailModal({
         }
     }
 
+    // Salin link publik file layout agar bisa dibagikan lewat WhatsApp/email dan
+    // dibuka siapa pun tanpa login.
+    const handleCopyLayoutLink = async (file: LayoutFile) => {
+        const link = `${window.location.origin}/lacak/file/${file.id}`
+        const copied = await copyTextToClipboard(link)
+        if (!copied) {
+            toast.error('Gagal menyalin link file layout')
+            return
+        }
+        toast.success('Link file layout disalin')
+    }
+
     const deleteLayoutFile = async (file: LayoutFile) => {
         setLayoutBusy(`delete-${file.id}`)
         try {
@@ -1815,7 +1827,7 @@ export default function OrderDetailModal({
 
 
                             {/* Layout Section - Show from proses_layout onwards */}
-                            {['proses_layout', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
+                            {['proses_layout', 'dp_produksi', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
                                 <div className="border border-slate-200 rounded-xl p-4 bg-white">
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-2">
@@ -1843,7 +1855,8 @@ export default function OrderDetailModal({
                                                 {file.status === 'ready' && <>
                                                     <button onClick={() => void openLayoutFile(file, false)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Buka</button>
                                                     <button onClick={() => void openLayoutFile(file, true)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Download</button>
-                                                    {order.stage === 'proses_layout' && <button onClick={() => setLayoutFileToDelete(file)} disabled={layoutBusy !== null} className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Hapus</button>}
+                                                    <button onClick={() => void handleCopyLayoutLink(file)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Salin Link</button>
+                                                    <button onClick={() => setLayoutFileToDelete(file)} disabled={layoutBusy !== null} className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Hapus</button>
                                                 </>}
                                             </div>
                                         ))}
@@ -1854,11 +1867,11 @@ export default function OrderDetailModal({
                                                 <a href={order.layout_url} target="_blank" rel="noopener noreferrer" className="rounded-md border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100">Buka File</a>
                                             </div>
                                         )}
-                                        {order.stage === 'proses_layout' && <>
+                                        <>
                                             <input ref={layoutFileInputRef} type="file" className="hidden" onChange={(event) => void handleLayoutFileSelect(event)} />
                                             <button onClick={() => layoutFileInputRef.current?.click()} disabled={layoutBusy === 'upload' || !order.brand_id} className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{layoutFiles.length > 0 ? 'Ganti File' : 'Upload File Layout'}</button>
                                             {layoutUploadProgress !== null && <div><div className="mb-1 flex justify-between text-xs text-slate-500"><span>Status upload</span><span>{layoutUploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${layoutUploadProgress}%` }} /></div></div>}
-                                        </>}
+                                        </>
                                     </div>
 
                                     {/* Legacy Google Drive input retired; the saved link remains as a read-only fallback above.
@@ -2266,11 +2279,6 @@ export default function OrderDetailModal({
                                                     </>
                                                 )}
                                             </button>
-                                            {!canMoveToNextStage() && (
-                                                <p className="text-xs text-center text-slate-500 pt-1">
-                                                    {getOrderStageReadiness(order, { hasInvoice: orderInvoice !== null }).label} — lengkapi dulu untuk pindah
-                                                </p>
-                                            )}
                                         </>
                                     )}
 

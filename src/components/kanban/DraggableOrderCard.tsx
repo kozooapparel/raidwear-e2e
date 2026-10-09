@@ -119,7 +119,7 @@ export default function DraggableOrderCard({ order, isBottleneck, onClick }: Dra
             <div className={`pt-2 px-1.5 pb-1.5 rounded-2xl transition-all ${stageReadiness.isReady
                 ? 'bg-emerald-100'
                 : 'bg-red-100'
-                } ${isDragging ? 'ring-2 ring-offset-2 ring-emerald-500' : ''} ${isBottleneck ? 'ring-2 ring-red-400 animate-pulse' : ''
+                } ${isDragging ? 'ring-2 ring-offset-2 ring-emerald-500' : ''} ${isBottleneck ? 'ring-2 ring-red-400' : ''
                 }`}>
 
                 {/* Header Status - Sejajar dengan tepi thumbnail di dalam kartu */}

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { MessageCircle, Mail } from 'lucide-react'
 import type { PortalBrand } from '@/lib/portal/types'
 
@@ -20,8 +21,18 @@ export function PortalHeader({ brand }: PortalHeaderProps) {
         <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
             <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">
-                        {brand.name.slice(0, 2).toUpperCase()}
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl bg-brand-600 text-sm font-bold text-white">
+                        {brand.logoUrl ? (
+                            <Image
+                                src={brand.logoUrl}
+                                alt={`${brand.name} logo`}
+                                width={36}
+                                height={36}
+                                className="h-full w-full bg-white object-contain p-0.5"
+                            />
+                        ) : (
+                            brand.name.slice(0, 2).toUpperCase()
+                        )}
                     </div>
                     <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-slate-900">{brand.name}</p>
