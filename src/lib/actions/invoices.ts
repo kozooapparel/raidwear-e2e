@@ -133,7 +133,7 @@ export async function getInvoicesByOrderId(orderId: string): Promise<InvoiceWith
 export async function generateUniqueInvoiceNumber(customerName: string, date: Date = new Date()): Promise<string> {
     const supabase = await createClient()
 
-    let baseNumber = generateInvoiceNumber(customerName, date)
+    const baseNumber = generateInvoiceNumber(customerName, date)
     let noInvoice = baseNumber
     let counter = 1
 
@@ -417,7 +417,7 @@ export async function getUnpaidInvoices(): Promise<(InvoiceWithCustomer & { bran
 export async function getInvoiceItemsRekap(filters?: InvoiceFilters): Promise<(InvoiceItem & { invoice: InvoiceWithCustomer })[]> {
     const supabase = await createClient()
 
-    let query = supabase
+    const query = supabase
         .from('invoice_items')
         .select(`
             *,

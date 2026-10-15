@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party agent tooling: gitignored, not our code. Without this its plain
+    // CommonJS test scripts flood the report with require() errors that nothing here can fix.
+    "agent-skills/**",
   ]),
 ]);
 
