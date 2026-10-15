@@ -10,6 +10,7 @@ import { FormOrderEditor, FormOrderDownloadButton } from '@/components/form-orde
 import { hasFormOrderData } from '@/lib/form-order'
 import { getOrderStageReadiness } from '@/lib/order-stage-readiness'
 import { ImageDropzone, CurrencyInput, ConfirmDialog, validateImageFile } from '@/components/ui'
+import InvoicePreviewButton from '@/components/invoices/InvoicePreviewButton'
 import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder } from '@/lib/actions/orders'
 
 type OrderDetailTab = 'detail' | 'payment' | 'stage' | 'form-order'
@@ -1319,16 +1320,22 @@ export default function OrderDetailModal({
                                             })()}
                                         </div>
                                     </div>
-                                    <Link
-                                        href={`/invoices/${orderInvoice.id}`}
-                                        className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                        </svg>
-                                        Lihat Invoice
-                                    </Link>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                        <Link
+                                            href={`/invoices/${orderInvoice.id}`}
+                                            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
+                                        >
+                                            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                            Edit
+                                        </Link>
+                                        <InvoicePreviewButton
+                                            invoiceId={orderInvoice.id}
+                                            label="Lihat"
+                                            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-brand-200 bg-white text-brand-700 text-sm font-medium hover:bg-brand-50 transition-colors"
+                                        />
+                                    </div>
                                 </div>
                             )}
 
@@ -1729,14 +1736,14 @@ export default function OrderDetailModal({
                             {order.stage === 'dp_produksi' && (
                                 <div className="space-y-2">
                                     {/* Invoice Status Row */}
-                                    <div className={`p-3 rounded-lg flex items-center justify-between ${orderInvoice ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-                                        <div className="flex items-center gap-2">
+                                    <div className={`p-3 rounded-lg flex flex-wrap items-center justify-between gap-2 ${orderInvoice ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
+                                        <div className="flex items-center gap-2 min-w-0">
                                             {orderInvoice ? (
-                                                <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg className="w-5 h-5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                             ) : (
-                                                <svg className="w-5 h-5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <svg className="w-5 h-5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                             )}
@@ -1744,16 +1751,25 @@ export default function OrderDetailModal({
                                                 Invoice
                                             </span>
                                             {orderInvoice && (
-                                                <span className="text-sm text-slate-500 font-mono">{orderInvoice.no_invoice}</span>
+                                                <span className="text-sm text-slate-500 font-mono truncate">{orderInvoice.no_invoice}</span>
                                             )}
                                         </div>
                                         {orderInvoice ? (
-                                            <Link
-                                                href={`/invoices/${orderInvoice.id}`}
-                                                className="px-3 py-1 text-xs font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
-                                            >
-                                                Lihat
-                                            </Link>
+                                            /* Dua tombol dibungkus satu grup: kalau tidak muat (mis. layar 360 px), grup turun
+                                               utuh ke baris berikutnya di dalam kartu — bukan melipat atau terpotong. */
+                                            <div className="flex gap-2 shrink-0 ml-auto">
+                                                <Link
+                                                    href={`/invoices/${orderInvoice.id}`}
+                                                    className="flex items-center justify-center px-3 py-1 text-xs font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                                                >
+                                                    Edit
+                                                </Link>
+                                                <InvoicePreviewButton
+                                                    invoiceId={orderInvoice.id}
+                                                    label="Lihat"
+                                                    className="flex items-center justify-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                                />
+                                            </div>
                                         ) : (
                                             <Link
                                                 href={`/invoices/new?order_id=${order.id}`}
