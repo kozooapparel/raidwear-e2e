@@ -58,11 +58,11 @@ function ImageSlot({
     return (
         <div
             onClick={() => onSelectTarget(slot)}
-            className={`rounded-xl border overflow-hidden transition-colors ${active ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
+            className={`rounded-lg border overflow-hidden transition-colors ${active ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
                 } ${className || ''}`}
         >
-            <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <p className="text-xs font-semibold text-slate-700">{title}</p>
+            <div className="flex items-center justify-between gap-[8px] border-b border-slate-200 bg-slate-50 px-[12px] py-[8px]">
+                <p className="text-base font-semibold text-slate-700">{title}</p>
                 {url && (
                     <button
                         type="button"
@@ -70,14 +70,15 @@ function ImageSlot({
                             e.stopPropagation()
                             onRemove()
                         }}
-                        className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 md:h-[32px] md:w-[32px]"
                         title="Hapus gambar"
+                        aria-label={`Hapus gambar ${title}`}
                     >
                         <X className="w-3.5 h-3.5" />
                     </button>
                 )}
             </div>
-            <div className="p-3">
+            <div className="p-[12px]">
                 {url ? (
                     <button
                         type="button"
@@ -88,7 +89,7 @@ function ImageSlot({
                         <img
                             src={url}
                             alt={title}
-                            className="w-full h-44 object-contain rounded-lg bg-slate-50 border border-slate-200"
+                            className="h-44 w-full rounded-md border border-slate-200 bg-slate-50 object-contain"
                         />
                     </button>
                 ) : (
@@ -187,29 +188,29 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
         }
     }
 
-    const fieldInput = 'input w-full'
-    const fieldLabel = 'block text-xs font-semibold text-slate-600 mb-1'
+    const fieldInput = 'input w-full min-h-[44px] md:min-h-[38px]'
+    const fieldLabel = 'block text-sm font-semibold text-slate-700 mb-[6px]'
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-[16px]">
             {/* Header: Logo brand + FORM ORDER PRODUKSI (otomatis) */}
-            <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="p-4 bg-gradient-to-r from-brand-600 to-brand-700 flex items-center gap-4">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="flex items-center gap-[12px] border-b border-slate-200 p-[16px]">
                     {order.brand?.logo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                             src={order.brand.logo_url}
                             alt={order.brand.name || 'Logo brand'}
-                            className="w-12 h-12 object-contain bg-white rounded-lg p-1"
+                            className="h-[48px] w-[48px] shrink-0 rounded-md border border-slate-200 bg-white object-contain p-[4px]"
                         />
                     ) : (
-                        <div className="w-12 h-12 rounded-lg bg-white/20 flex items-center justify-center text-white font-bold text-lg">
+                        <div className="flex h-[48px] w-[48px] shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-lg font-semibold text-slate-500">
                             {(order.brand?.name || 'R')?.charAt(0).toUpperCase()}
                         </div>
                     )}
-                    <div>
-                        <h2 className="text-lg font-bold text-white leading-tight">FORM ORDER PRODUKSI</h2>
-                        <p className="text-brand-100 text-xs">
+                    <div className="min-w-0">
+                        <h2 className="text-lg font-semibold leading-tight text-slate-900">FORM ORDER PRODUKSI</h2>
+                        <p className="truncate text-base text-slate-500">
                             {order.brand?.name || ''}{order.brand?.name ? ' · ' : ''}
                             {order.nama_po || order.spk_number || 'Order Produksi'}
                         </p>
@@ -218,19 +219,19 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
 
                 {/* Data customer (otomatis) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200">
-                    <div className="p-4">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Customer</p>
-                        <p className="text-sm font-semibold text-slate-800 mt-1">{order.customer?.name || '-'}</p>
+                    <div className="p-[16px]">
+                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Customer</p>
+                        <p className="mt-[4px] text-base font-semibold text-slate-800">{order.customer?.name || '-'}</p>
                     </div>
-                    <div className="p-4">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Tanggal Order</p>
-                        <p className="text-sm font-semibold text-slate-800 mt-1">{formatTanggal(order.created_at)}</p>
+                    <div className="p-[16px]">
+                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Tanggal Order</p>
+                        <p className="mt-[4px] text-base font-semibold text-slate-800">{formatTanggal(order.created_at)}</p>
                     </div>
-                    <div className="p-4">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Deadline Produksi</p>
-                        <p className="text-sm font-semibold text-brand-700 mt-1">
+                    <div className="p-[16px]">
+                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Deadline Produksi</p>
+                        <p className="mt-[4px] text-base font-semibold text-slate-900">
                             {formatTanggal(getDeadlineProduksi(order.created_at))}
-                            <span className="block text-[10px] font-normal text-slate-400">
+                            <span className="block text-sm font-normal text-slate-500">
                                 {PRODUKSI_DURATION_DAYS} hari sejak order dibuat
                             </span>
                         </p>
@@ -239,15 +240,15 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
             </div>
 
             {/* Layout 2 kolom: kanan atas = list order, kiri atas = form */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
                 {/* Kiri: kolom form (detail produk + kebutuhan produksi) */}
-                <div className="lg:col-span-2 space-y-5">
+                <div className="lg:col-span-2 space-y-[16px]">
                     {/* Detail Produk */}
-                    <div className="rounded-xl border border-slate-200 overflow-hidden">
-                        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                            <h3 className="text-sm font-bold text-slate-800">Detail Produk</h3>
+                    <div className="rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="border-b border-slate-200 px-[16px] py-[12px]">
+                            <h3 className="text-lg font-semibold text-slate-900">Detail Produk</h3>
                         </div>
-                        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px] p-[16px]">
                             <div>
                                 <label className={fieldLabel}>Jenis Produk</label>
                                 <input
@@ -312,11 +313,11 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     </div>
 
                     {/* Kebutuhan Produksi */}
-                    <div className="rounded-xl border border-slate-200 overflow-hidden">
-                        <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                            <h3 className="text-sm font-bold text-slate-800">Kebutuhan Produksi</h3>
+                    <div className="rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="border-b border-slate-200 px-[16px] py-[12px]">
+                            <h3 className="text-lg font-semibold text-slate-900">Kebutuhan Produksi</h3>
                         </div>
-                        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px] p-[16px]">
                             <div>
                                 <label className={fieldLabel}>Kebutuhan Bahan (meter)</label>
                                 <NumberInput
@@ -343,7 +344,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     </div>
 
                     {/* Kerah (kiri bawah) + Mockup (kanan bawah) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
                         <ImageSlot
                             title="Kerah"
                             url={collarImages[0]}
@@ -372,13 +373,13 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                 {/* Kanan atas: List Order — memanjang ke bawah */}
                 <div
                     onClick={() => setPasteTarget('list')}
-                    className={`rounded-xl border overflow-hidden h-fit transition-colors ${pasteTarget === 'list' ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
+                    className={`rounded-lg border overflow-hidden h-fit bg-white transition-colors ${pasteTarget === 'list' ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
                         }`}
                 >
-                    <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200">
-                        <h3 className="text-sm font-bold text-slate-800">List Order</h3>
+                    <div className="border-b border-slate-200 px-[16px] py-[12px]">
+                        <h3 className="text-lg font-semibold text-slate-900">List Order</h3>
                     </div>
-                    <div className="p-3 space-y-3">
+                    <div className="space-y-[12px] p-[12px]">
                         <ImageDropzone
                             label={uploading === 'list' ? 'Mengupload...' : 'Klik kolom ini lalu Ctrl+V, atau upload List Order'}
                             onFileSelect={file => uploadImage(file, 'list')}
@@ -386,9 +387,9 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                             enablePaste={pasteTarget === 'list'}
                         />
                         {listOrderImages.length > 0 && (
-                            <div className="space-y-3">
+                            <div className="space-y-[12px]">
                                 {listOrderImages.map((url, idx) => (
-                                    <div key={url} className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                                    <div key={url} className="relative rounded-md overflow-hidden border border-slate-200 bg-slate-50">
                                         <button
                                             type="button"
                                             className="block w-full"
@@ -404,8 +405,9 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                                         <button
                                             type="button"
                                             onClick={() => removeImage('list', url)}
-                                            className="absolute top-1.5 right-1.5 p-1 rounded-md bg-white/90 shadow text-slate-500 hover:text-red-500 transition-colors"
+                                            className="absolute top-[8px] right-[8px] flex h-[44px] w-[44px] items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-red-600/90 md:h-[32px] md:w-[32px]"
                                             title="Hapus gambar"
+                                            aria-label={`Hapus gambar list order ${idx + 1}`}
                                         >
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -418,12 +420,12 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
             </div>
 
             {/* Save */}
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-[4px]">
                 <button
                     type="button"
                     onClick={handleSave}
                     disabled={saving || isLoading}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-brand-700 text-white font-semibold hover:from-brand-700 hover:to-brand-800 disabled:opacity-50 transition-all flex items-center gap-2"
+                    className="btn-primary min-h-[44px] md:min-h-[38px]"
                 >
                     <Upload className="w-4 h-4" />
                     {saving ? 'Menyimpan...' : 'Simpan Form Order'}
@@ -446,7 +448,8 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                         <button
                             type="button"
                             onClick={() => setPreviewImage(null)}
-                            className="absolute -top-3 -right-3 p-2 rounded-full bg-white shadow-lg text-slate-600 hover:text-slate-900 transition-colors"
+                            className="absolute -top-3 -right-3 flex h-[44px] w-[44px] items-center justify-center rounded-full bg-white text-slate-600 shadow-lg transition-colors hover:text-slate-900"
+                            aria-label="Tutup pratinjau"
                         >
                             <X className="w-5 h-5" />
                         </button>

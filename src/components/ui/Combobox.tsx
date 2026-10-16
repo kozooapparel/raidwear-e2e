@@ -106,7 +106,7 @@ const SIZE_CLASSES = {
         padPlain: 'pl-3 pr-8',
     },
     md: {
-        input: 'py-2.5 text-sm rounded-xl',
+        input: 'py-2.5 text-sm rounded-md min-h-[44px] md:min-h-[38px]',
         icon: 'h-4 w-4',
         iconLeft: 'left-3',
         iconRight: 'right-2.5',
@@ -295,7 +295,7 @@ export default function Combobox<T>({
                                 setQuery('')
                                 inputRef.current?.focus()
                             }}
-                            className="rounded p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                            className="flex h-[44px] shrink-0 items-center justify-center rounded-md px-[6px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 md:h-[32px]"
                         >
                             <IconClose className={s.icon} />
                         </button>

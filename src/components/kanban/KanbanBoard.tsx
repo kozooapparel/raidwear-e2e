@@ -360,18 +360,18 @@ export default function KanbanBoard({
     return (
         <div className="flex flex-col h-[calc(100vh-4rem)]">
             {/* Header Section */}
-            <div className="space-y-2 mb-3">
+            <div className="space-y-[8px] mb-[12px]">
                 {/* Metrics Row */}
-                <MetricsBar metrics={metrics} />
+                <MetricsBar metrics={metrics} orders={orders} />
 
                 {/* Search and Add Button Row */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-[8px]">
                     <div className="flex-1">
                         <SearchBar key={searchKey} onSearch={setSearchQuery} />
                     </div>
                     <button
                         onClick={() => setIsAddCustomerModalOpen(true)}
-                        className="btn-secondary"
+                        className="btn-secondary min-h-[44px] md:min-h-[38px]"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
@@ -380,7 +380,7 @@ export default function KanbanBoard({
                     </button>
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="btn-primary"
+                        className="btn-primary min-h-[44px] md:min-h-[38px]"
                     >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -390,7 +390,7 @@ export default function KanbanBoard({
                 </div>
 
                 {/* Filter Row */}
-                <div className="surface flex flex-wrap items-center gap-2 p-2">
+                <div className="flex flex-wrap items-center gap-[8px] rounded-lg border border-slate-200 bg-white p-[8px]">
                     <OrderStatusFilter
                         value={orderFilter}
                         onChange={setOrderFilter}
@@ -424,7 +424,7 @@ export default function KanbanBoard({
                         <button
                             type="button"
                             onClick={resetFilters}
-                            className="btn-ghost btn-sm text-slate-600"
+                            className="btn-ghost btn-sm min-h-[44px] text-slate-600 md:min-h-[38px]"
                         >
                             Reset
                         </button>
@@ -442,13 +442,13 @@ export default function KanbanBoard({
                 <div className="flex-1 relative">
                     {/* Mobile Stage Header with Navigation */}
                     {isMobile && (
-                        <div className="mb-3">
+                        <div className="mb-[12px]">
                             {/* Stage Navigation */}
-                            <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center justify-between mb-[8px]">
                                 <button
                                     onClick={() => setCurrentStageIndex(prev => Math.max(0, prev - 1))}
                                     disabled={currentStageIndex === 0}
-                                    className={`p-2 rounded-full ${currentStageIndex === 0
+                                    className={`flex h-[44px] w-[44px] items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${currentStageIndex === 0
                                         ? 'text-slate-300 cursor-not-allowed'
                                         : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'
                                         }`}
@@ -458,14 +458,14 @@ export default function KanbanBoard({
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                     </svg>
                                 </button>
-                                <div className="text-center flex-1">
-                                    <h3 className="font-semibold text-slate-900">{STAGE_LABELS[STAGES_ORDER[currentStageIndex]]}</h3>
-                                    <p className="text-xs text-slate-500">{currentStageIndex + 1} / {STAGES_ORDER.length}</p>
+                                <div className="text-center flex-1 min-w-0">
+                                    <h3 className="text-lg font-semibold text-slate-900 truncate">{STAGE_LABELS[STAGES_ORDER[currentStageIndex]]}</h3>
+                                    <p className="text-sm text-slate-500 text-mono">{currentStageIndex + 1} / {STAGES_ORDER.length}</p>
                                 </div>
                                 <button
                                     onClick={() => setCurrentStageIndex(prev => Math.min(STAGES_ORDER.length - 1, prev + 1))}
                                     disabled={currentStageIndex === STAGES_ORDER.length - 1}
-                                    className={`p-2 rounded-full ${currentStageIndex === STAGES_ORDER.length - 1
+                                    className={`flex h-[44px] w-[44px] items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 ${currentStageIndex === STAGES_ORDER.length - 1
                                         ? 'text-slate-300 cursor-not-allowed'
                                         : 'text-slate-600 hover:bg-slate-100 active:bg-slate-200'
                                         }`}
@@ -477,18 +477,20 @@ export default function KanbanBoard({
                                 </button>
                             </div>
                             {/* Stage Indicator Dots */}
-                            <div className="flex justify-center gap-1.5">
+                            <div className="flex justify-center gap-[2px]">
                                 {STAGES_ORDER.map((stage, index) => (
                                     <button
                                         key={stage}
                                         onClick={() => setCurrentStageIndex(index)}
-                                        className={`w-2 h-2 rounded-full transition-all ${index === currentStageIndex
-                                            ? 'bg-brand-600 w-4'
-                                            : 'bg-slate-300 hover:bg-slate-400'
-                                            }`}
+                                        className="flex h-[44px] w-[22px] items-center justify-center"
                                         title={STAGE_LABELS[stage]}
                                         aria-label={`Buka stage ${STAGE_LABELS[stage]}`}
-                                    />
+                                    >
+                                        <span className={`block h-[8px] rounded-full transition-all ${index === currentStageIndex
+                                            ? 'bg-brand-600 w-[16px]'
+                                            : 'bg-slate-300 w-[8px] hover:bg-slate-400'
+                                            }`} />
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -502,7 +504,7 @@ export default function KanbanBoard({
                                 <div className="sticky top-1/2 -translate-y-1/2 pointer-events-auto">
                                     <button
                                         onClick={() => scrollKanban('left')}
-                                        className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-brand-600 hover:text-white hover:border-brand-600 transition-all hover:scale-110 shadow-lg"
+                                        className="flex h-[44px] w-[44px] items-center justify-center rounded-full bg-white text-slate-600 shadow-md transition-colors hover:bg-slate-50 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
                                         title="Scroll Left"
                                         aria-label="Geser ke kiri"
                                     >
@@ -518,7 +520,7 @@ export default function KanbanBoard({
                                 <div className="sticky top-1/2 -translate-y-1/2 pointer-events-auto">
                                     <button
                                         onClick={() => scrollKanban('right')}
-                                        className="w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-brand-600 hover:text-white hover:border-brand-600 transition-all hover:scale-110 shadow-lg"
+                                        className="flex h-[44px] w-[44px] items-center justify-center rounded-full bg-white text-slate-600 shadow-md transition-colors hover:bg-slate-50 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
                                         title="Scroll Right"
                                         aria-label="Geser ke kanan"
                                     >
@@ -573,9 +575,9 @@ export default function KanbanBoard({
 
                 <DragOverlay>
                     {activeOrder ? (
-                        <div className="p-3 rounded-xl bg-white border-2 border-brand-500 shadow-2xl opacity-90">
-                            <p className="font-semibold text-slate-900 text-sm">{activeOrder.customer?.name}</p>
-                            <p className="text-xs text-slate-500 text-mono">{activeOrder.total_quantity} pcs</p>
+                        <div className="rounded-lg border border-brand-500 bg-white p-[12px] shadow-lg opacity-95">
+                            <p className="text-base font-semibold text-slate-900">{activeOrder.customer?.name}</p>
+                            <p className="text-sm text-slate-500 text-mono">{activeOrder.total_quantity} pcs</p>
                         </div>
                     ) : null}
                 </DragOverlay>

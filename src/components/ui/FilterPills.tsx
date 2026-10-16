@@ -24,8 +24,9 @@ const ACTIVE_CLASSES: Record<FilterTone, string> = {
 }
 
 const SIZE_CLASSES = {
-    sm: 'px-2.5 py-1 text-xs',
-    md: 'px-3 py-1.5 text-sm',
+    // min-h menjaga target sentuh >= 44 px di HP tanpa mengubah tinggi di desktop.
+    sm: 'px-2.5 py-1 text-xs min-h-[44px] md:min-h-[28px]',
+    md: 'px-3 py-1.5 text-sm min-h-[44px] md:min-h-[38px]',
 } as const
 
 interface FilterPillsProps<T extends string> {
@@ -75,8 +76,8 @@ export default function FilterPills<T extends string>({
                         {option.label}
                         {typeof option.count === 'number' && (
                             <span
-                                className={`text-mono text-[11px] ${
-                                    isActive ? 'text-white/80' : 'text-slate-400'
+                                className={`text-mono text-[12px] ${
+                                    isActive ? 'text-white/80' : 'text-slate-500'
                                 }`}
                             >
                                 {option.count}

@@ -1,7 +1,7 @@
 'use client'
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { STAGE_LABELS, STAGES_ORDER, OrderStage, GATEKEEPER_STAGES, OrderWithCustomer } from '@/types/database'
+import { STAGE_LABELS, STAGES_ORDER, OrderStage, OrderWithCustomer } from '@/types/database'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { FormOrderEditor, FormOrderDownloadButton } from '@/components/form-order'
 import { hasFormOrderData } from '@/lib/form-order'
 import { getOrderStageReadiness } from '@/lib/order-stage-readiness'
+import { copyTextToClipboard } from '@/lib/utils/clipboard'
 import { ImageDropzone, CurrencyInput, ConfirmDialog, validateImageFile } from '@/components/ui'
 import InvoicePreviewButton from '@/components/invoices/InvoicePreviewButton'
 import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder } from '@/lib/actions/orders'
@@ -46,42 +47,6 @@ function formatFileSize(bytes: number) {
     const units = ['B', 'KB', 'MB', 'GB', 'TB']
     const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
     return `${(bytes / (1024 ** index)).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
-}
-
-/**
- * Menyalin teks ke clipboard.
- *
- * Clipboard API hanya tersedia pada secure context (https atau localhost).
- * Bila dashboard dibuka lewat http di jaringan lokal, API tersebut tidak ada
- * sehingga dipakai fallback textarea + execCommand.
- */
-async function copyTextToClipboard(text: string): Promise<boolean> {
-    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
-        try {
-            await navigator.clipboard.writeText(text)
-            return true
-        } catch {
-            // Clipboard API bisa ditolak; lanjut ke fallback di bawah.
-        }
-    }
-
-    try {
-        const textarea = document.createElement('textarea')
-        textarea.value = text
-        textarea.setAttribute('readonly', '')
-        textarea.style.position = 'fixed'
-        textarea.style.top = '-9999px'
-        textarea.style.opacity = '0'
-        document.body.appendChild(textarea)
-        textarea.focus()
-        textarea.select()
-        textarea.setSelectionRange(0, text.length)
-        const succeeded = document.execCommand('copy')
-        document.body.removeChild(textarea)
-        return succeeded
-    } catch {
-        return false
-    }
 }
 
 async function storageRequest<T>(url: string, init?: RequestInit): Promise<T> {
@@ -882,13 +847,15 @@ export default function OrderDetailModal({
 
     // Payment status badge
     const getPaymentBadge = (verified: boolean, amount: number) => {
+        // Chip status: isi tipis + tepi + titik, supaya status tetap terbaca
+        // meski warnanya tidak terlihat. Teks tidak diubah.
         if (verified) {
-            return <span className="px-2 py-1 text-xs rounded-full bg-emerald-500/20 text-emerald-400">✓ Verified</span>
+            return <span className="inline-flex items-center gap-[6px] rounded-full border border-emerald-200 bg-emerald-50 px-[8px] py-[2px] text-sm font-medium text-emerald-700"><span className="h-[6px] w-[6px] rounded-full bg-emerald-500" aria-hidden="true" />✓ Verified</span>
         }
         if (amount > 0) {
-            return <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-400">Pending</span>
+            return <span className="inline-flex items-center gap-[6px] rounded-full border border-amber-200 bg-amber-50 px-[8px] py-[2px] text-sm font-medium text-amber-700"><span className="h-[6px] w-[6px] rounded-full bg-amber-500" aria-hidden="true" />Pending</span>
         }
-        return <span className="px-2 py-1 text-xs rounded-full bg-slate-500/20 text-slate-500">-</span>
+        return <span className="inline-flex items-center gap-[6px] rounded-full border border-slate-200 bg-slate-50 px-[8px] py-[2px] text-sm font-medium text-slate-500"><span className="h-[6px] w-[6px] rounded-full bg-slate-400" aria-hidden="true" />-</span>
     }
 
     // Handle delete order
@@ -958,24 +925,25 @@ export default function OrderDetailModal({
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-            {/* Modal */}
-            <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-2xl m-4 flex flex-col">
+            {/* Modal — satu tingkat elevasi: bayangan saja (tanpa tepi), radius 12 */}
+            <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white rounded-lg shadow-2xl m-4 flex flex-col">
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-900">{order.customer?.name}</h2>
-                        <p className="text-sm text-slate-500">{order.customer?.phone}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 text-sm rounded-full font-medium ${isReady
-                            ? 'bg-emerald-500/20 text-emerald-600'
-                            : 'bg-red-500/20 text-red-600'
-                            }`}>
+                <div className="px-[24px] py-[16px] border-b border-slate-200 flex flex-wrap items-center justify-between gap-[12px]">
+                    {/* Identitas: nama/telepon + chip stage (chip tetap satu baris) */}
+                    <div className="flex min-w-0 flex-wrap items-center gap-[12px]">
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-semibold text-slate-900 truncate">{order.customer?.name}</h2>
+                            <p className="text-base text-slate-500 truncate">{order.customer?.phone}</p>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center gap-[6px] whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-[10px] py-[4px] text-sm font-medium text-slate-700">
+                            <span className={`h-[6px] w-[6px] rounded-full ${isReady ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
                             {STAGE_LABELS[order.stage]}
                         </span>
+                    </div>
+                    <div className="flex items-center gap-[8px] ml-auto">
                         <button
                             onClick={handleCopyPortalLink}
-                            className="p-2 rounded-lg hover:bg-brand-500/10 text-brand-600 hover:text-brand-700"
+                            className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[36px] md:w-[36px]"
                             title="Salin Link Portal"
                             aria-label="Salin link portal customer"
                         >
@@ -992,7 +960,7 @@ export default function OrderDetailModal({
                         </button>
                         <button
                             onClick={() => setShowArchiveConfirm(true)}
-                            className="p-2 rounded-lg hover:bg-amber-100 text-amber-600 hover:text-amber-700"
+                            className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[36px] md:w-[36px]"
                             title="Arsipkan Order"
                             aria-label="Arsipkan order"
                         >
@@ -1002,7 +970,7 @@ export default function OrderDetailModal({
                         </button>
                         <button
                             onClick={() => setShowDeleteConfirm(true)}
-                            className="p-2 rounded-lg hover:bg-red-100 text-red-600 hover:text-red-700"
+                            className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600 md:h-[36px] md:w-[36px]"
                             title="Hapus Permanen"
                             aria-label="Hapus order permanen"
                         >
@@ -1010,7 +978,7 @@ export default function OrderDetailModal({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
                         </button>
-                        <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-900">
+                        <button onClick={onClose} className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[36px] md:w-[36px]" aria-label="Tutup">
                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
@@ -1023,24 +991,14 @@ export default function OrderDetailModal({
                     {/* Detail tab - always show */}
                     <button
                         onClick={() => setActiveTab('detail')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'detail'
-                            ? isReady
-                                ? 'text-emerald-500 border-b-2 border-emerald-500'
-                                : 'text-red-500 border-b-2 border-red-500'
-                            : 'text-slate-500 hover:text-slate-900'
-                            }`}
+                        className={`flex-1 whitespace-nowrap px-[6px] py-[12px] text-base transition-colors border-b-2 ${activeTab === 'detail' ? 'text-brand-600 border-brand-600 font-semibold' : 'text-slate-500 border-transparent hover:text-slate-900'}`}
                     >
                         Detail
                     </button>
                     {/* Bayar tab - always show */}
                     <button
                         onClick={() => setActiveTab('payment')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'payment'
-                            ? isReady
-                                ? 'text-emerald-500 border-b-2 border-emerald-500'
-                                : 'text-red-500 border-b-2 border-red-500'
-                            : 'text-slate-500 hover:text-slate-900'
-                            }`}
+                        className={`flex-1 whitespace-nowrap px-[6px] py-[12px] text-base transition-colors border-b-2 ${activeTab === 'payment' ? 'text-brand-600 border-brand-600 font-semibold' : 'text-slate-500 border-transparent hover:text-slate-900'}`}
                     >
                         Bayar
                     </button>
@@ -1048,12 +1006,7 @@ export default function OrderDetailModal({
                     {['proses_layout', 'dp_produksi', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
                         <button
                             onClick={() => setActiveTab('form-order')}
-                            className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'form-order'
-                                ? isReady
-                                    ? 'text-emerald-500 border-b-2 border-emerald-500'
-                                    : 'text-red-500 border-b-2 border-red-500'
-                                : 'text-slate-500 hover:text-slate-900'
-                                }`}
+                            className={`flex-1 whitespace-nowrap px-[6px] py-[12px] text-base transition-colors border-b-2 ${activeTab === 'form-order' ? 'text-brand-600 border-brand-600 font-semibold' : 'text-slate-500 border-transparent hover:text-slate-900'}`}
                         >
                             Form Order
                         </button>
@@ -1061,44 +1014,39 @@ export default function OrderDetailModal({
                     {/* Stage tab - always show */}
                     <button
                         onClick={() => setActiveTab('stage')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'stage'
-                            ? isReady
-                                ? 'text-emerald-500 border-b-2 border-emerald-500'
-                                : 'text-red-500 border-b-2 border-red-500'
-                            : 'text-slate-500 hover:text-slate-900'
-                            }`}
+                        className={`flex-1 whitespace-nowrap px-[6px] py-[12px] text-base transition-colors border-b-2 ${activeTab === 'stage' ? 'text-brand-600 border-brand-600 font-semibold' : 'text-slate-500 border-transparent hover:text-slate-900'}`}
                     >
                         Stage
                     </button>
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex-1 overflow-y-auto p-[24px]">
                     {/* Detail Tab */}
                     {activeTab === 'detail' && (
-                        <div className="space-y-6">
+                        <div className="space-y-[16px]">
                             {/* Customer Info - Show at early stages */}
                             {['customer_dp_desain', 'proses_desain', 'proses_layout'].includes(order.stage) && (
-                                <div className="p-4 rounded-xl bg-brand-50 border border-brand-100">
-                                    <p className="text-xs text-brand-600 mb-3 font-medium">Info Customer</p>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-brand-600 flex items-center justify-center text-white font-bold">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="text-sm font-medium uppercase tracking-wide text-slate-500 mb-[12px]">Info Customer</p>
+                                    <div className="space-y-[8px]">
+                                        <div className="flex items-center gap-[12px]">
+                                            <div className="flex h-[40px] w-[40px] shrink-0 items-center justify-center rounded-full bg-slate-900 text-base font-semibold text-white">
                                                 {order.customer?.name?.charAt(0) || '?'}
                                             </div>
-                                            <div>
-                                                <p className="font-bold text-slate-900">{order.customer?.name}</p>
-                                                <p className="text-sm text-slate-600">{order.customer?.phone}</p>
+                                            <div className="min-w-0">
+                                                <p className="text-base font-semibold text-slate-900 truncate">{order.customer?.name}</p>
+                                                <p className="text-base text-slate-600">{order.customer?.phone}</p>
                                             </div>
                                         </div>
                                         {order.customer?.alamat && (
-                                            <p className="text-sm text-slate-600 pl-13">
-                                                <span className="text-slate-400">Alamat:</span> {order.customer.alamat}
+                                            <p className="text-base text-slate-600 pl-[52px]">
+                                                <span className="text-slate-500">Alamat:</span> {order.customer.alamat}
                                             </p>
                                         )}
                                         {order.customer?.kota && (
-                                            <p className="text-sm text-slate-600">
-                                                <span className="text-slate-400">Kota:</span> {order.customer.kota}
+                                            <p className="text-base text-slate-600">
+                                                <span className="text-slate-500">Kota:</span> {order.customer.kota}
                                             </p>
                                         )}
                                     </div>
@@ -1126,11 +1074,11 @@ export default function OrderDetailModal({
                                             className="object-contain"
                                         />
                                         {/* Label Badge */}
-                                        <div className="absolute top-2 left-2 px-2 py-1 rounded-md bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium">
+                                        <div className="absolute top-[8px] left-[8px] rounded-md bg-black/50 px-[8px] py-[4px] text-sm font-medium text-white backdrop-blur-sm">
                                             Mockup Desain
                                         </div>
                                         {/* Kontrol ganti/hapus mockup — bisa dipakai di tahap mana pun */}
-                                        <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                                        <div className="absolute top-[8px] right-[8px] flex items-center gap-[8px]">
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -1140,7 +1088,7 @@ export default function OrderDetailModal({
                                                 disabled={loading}
                                                 title="Ganti mockup"
                                                 aria-label="Ganti mockup"
-                                                className="flex items-center gap-1 rounded-md bg-black/60 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm hover:bg-black/75 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                className="flex min-h-[44px] items-center gap-[6px] rounded-md bg-black/60 px-[10px] text-sm font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/75 disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[32px]"
                                             >
                                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1156,7 +1104,7 @@ export default function OrderDetailModal({
                                                 disabled={deletingMockup || loading}
                                                 title="Hapus mockup"
                                                 aria-label="Hapus mockup"
-                                                className="rounded-md bg-red-500/90 p-1.5 text-white backdrop-blur-sm hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                className="flex h-[44px] w-[44px] items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-red-600/90 disabled:cursor-not-allowed disabled:opacity-50 md:h-[32px] md:w-[32px]"
                                             >
                                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1168,8 +1116,8 @@ export default function OrderDetailModal({
                             )}
 
                             {/* Design Notes */}
-                            <div className="p-4 rounded-xl bg-brand-50 border border-brand-100">
-                                <p className="text-xs text-brand-600 mb-2 flex items-center gap-1 font-medium">
+                            <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                <p className="mb-[8px] flex items-center gap-[6px] text-sm font-medium uppercase tracking-wide text-slate-500">
                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                     </svg>
@@ -1179,7 +1127,7 @@ export default function OrderDetailModal({
                                     value={designNotes}
                                     onChange={(e) => setDesignNotes(e.target.value)}
                                     placeholder="Tambahkan catatan desain..."
-                                    className="w-full px-3 py-2 rounded-lg bg-white border border-brand-200 text-slate-900 placeholder-subtle focus:outline-none focus:border-brand-500 resize-none text-sm"
+                                    className="input resize-none min-h-[88px]"
                                     rows={3}
                                 />
                                 <button
@@ -1200,46 +1148,46 @@ export default function OrderDetailModal({
                                         }
                                     }}
                                     disabled={savingNotes}
-                                    className="mt-2 px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                                    className="btn-primary mt-[12px] min-h-[44px] md:min-h-[38px]"
                                 >
                                     {savingNotes ? 'Menyimpan...' : 'Simpan Catatan'}
                                 </button>
                             </div>
 
                             {/* Order Info */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 rounded-xl bg-slate-50">
-                                    <p className="text-xs text-slate-500 mb-1">Jumlah</p>
-                                    <p className="text-xl font-bold text-slate-900">{order.total_quantity} pcs</p>
+                            <div className="grid grid-cols-2 gap-[12px]">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="mb-[4px] text-sm font-medium uppercase tracking-wide text-slate-500">Jumlah</p>
+                                    <p className="text-2xl font-semibold text-slate-900 text-mono">{order.total_quantity} pcs</p>
                                 </div>
-                                <div className="p-4 rounded-xl bg-slate-50">
-                                    <p className="text-xs text-slate-500 mb-1">Deadline</p>
-                                    <p className="text-xl font-bold text-slate-900">{formatDate(orderInvoice?.deadline || order.deadline)}</p>
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="mb-[4px] text-sm font-medium uppercase tracking-wide text-slate-500">Deadline</p>
+                                    <p className="text-2xl font-semibold text-slate-900 text-mono">{formatDate(orderInvoice?.deadline || order.deadline)}</p>
                                 </div>
                             </div>
 
                             {/* Description */}
                             {order.order_description && (
-                                <div className="p-4 rounded-xl bg-slate-50">
-                                    <p className="text-xs text-slate-500 mb-2">Deskripsi Order</p>
-                                    <p className="text-slate-900 whitespace-pre-wrap">{order.order_description}</p>
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="mb-[8px] text-sm font-medium uppercase tracking-wide text-slate-500">Deskripsi Order</p>
+                                    <p className="text-base text-slate-700 whitespace-pre-wrap">{order.order_description}</p>
                                 </div>
                             )}
 
                             {/* Size Breakdown */}
                             {order.size_breakdown && Object.keys(order.size_breakdown).length > 0 && (
-                                <div className="p-4 rounded-xl bg-slate-50">
-                                    <p className="text-xs text-slate-500 mb-3">Breakdown Ukuran</p>
-                                    <div className="flex gap-2 flex-wrap">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="mb-[12px] text-sm font-medium uppercase tracking-wide text-slate-500">Breakdown Ukuran</p>
+                                    <div className="flex flex-wrap gap-[8px]">
                                         {Object.entries(order.size_breakdown).map(([size, qty]) => (
-                                            <div key={size} className="px-3 py-2 rounded-lg bg-white border border-slate-200 text-center min-w-[50px]">
-                                                <p className="text-xs text-slate-500">{size}</p>
-                                                <p className="text-lg font-bold text-slate-900">{qty}</p>
+                                            <div key={size} className="min-w-[52px] rounded-md border border-slate-200 bg-slate-50 px-[12px] py-[8px] text-center">
+                                                <p className="text-sm text-slate-500">{size}</p>
+                                                <p className="text-lg font-semibold text-slate-900 text-mono">{qty}</p>
                                             </div>
                                         ))}
-                                        <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-center min-w-[60px]">
-                                            <p className="text-xs text-emerald-600">Total</p>
-                                            <p className="text-lg font-bold text-emerald-600">
+                                        <div className="min-w-[60px] rounded-md border border-slate-300 bg-slate-100 px-[12px] py-[8px] text-center">
+                                            <p className="text-sm text-slate-600">Total</p>
+                                            <p className="text-lg font-semibold text-slate-900 text-mono">
                                                 {Object.values(order.size_breakdown).reduce((a, b) => a + b, 0)}
                                             </p>
                                         </div>
@@ -1249,26 +1197,27 @@ export default function OrderDetailModal({
 
                             {/* Production Notes */}
                             {order.production_notes && (
-                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
-                                    <p className="text-xs text-amber-600 mb-2 flex items-center gap-1">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="mb-[8px] flex items-center gap-[6px] text-sm font-medium uppercase tracking-wide text-slate-500">
                                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                         </svg>
                                         Catatan Produksi
                                     </p>
-                                    <p className="text-slate-900 whitespace-pre-wrap">{order.production_notes}</p>
+                                    <p className="text-base text-slate-700 whitespace-pre-wrap">{order.production_notes}</p>
                                 </div>
                             )}
 
                             {/* SPK Number */}
                             {order.spk_number && (
-                                <div className="p-3 rounded-lg bg-brand-50 border border-brand-200 flex items-center justify-between">
-                                    <div>
-                                        <p className="text-xs text-brand-600">Nomor SPK</p>
-                                        <p className="font-mono font-bold text-brand-800">{order.spk_number}</p>
+                                <div className="flex flex-wrap items-center justify-between gap-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Nomor SPK</p>
+                                        <p className="text-base font-semibold text-slate-900 text-mono">{order.spk_number}</p>
                                     </div>
                                     <FormOrderDownloadButton
                                         order={order}
+                                        className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                     />
                                 </div>
                             )}
@@ -1277,53 +1226,53 @@ export default function OrderDetailModal({
 
                     {/* Payment Tab */}
                     {activeTab === 'payment' && (
-                        <div className="space-y-4">
+                        <div className="space-y-[16px]">
                             {/* Invoice Info Card - Show if invoice exists */}
                             {orderInvoice && (
-                                <div className="p-4 rounded-xl bg-brand-50 border border-brand-200">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-brand-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <div className="mb-[12px] flex items-center justify-between gap-[8px]">
+                                        <div className="flex items-center gap-[8px]">
+                                            <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
-                                            <span className="text-sm font-semibold text-brand-800">Invoice</span>
+                                            <span className="text-lg font-semibold text-slate-900">Invoice</span>
                                         </div>
-                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+                                        <span className="inline-flex items-center gap-[6px] rounded-full border border-emerald-200 bg-emerald-50 px-[8px] py-[2px] text-sm font-medium text-emerald-700">
                                             ✓ Dibuat
                                         </span>
                                     </div>
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between text-sm">
+                                    <div className="space-y-[8px]">
+                                        <div className="flex justify-between gap-[8px] text-base">
                                             <span className="text-slate-600">No. Invoice</span>
-                                            <span className="font-mono font-medium text-slate-900">{orderInvoice.no_invoice}</span>
+                                            <span className="font-medium text-slate-900 text-mono">{orderInvoice.no_invoice}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
+                                        <div className="flex justify-between gap-[8px] text-base">
                                             <span className="text-slate-600">Total Invoice</span>
-                                            <span className="font-semibold text-slate-900">{formatCurrency(orderInvoice.total)}</span>
+                                            <span className="font-semibold text-slate-900 text-mono">{formatCurrency(orderInvoice.total)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
+                                        <div className="flex justify-between gap-[8px] text-base">
                                             <span className="text-slate-600">Total Dibayar</span>
-                                            <span className="font-semibold text-emerald-600">
+                                            <span className="font-semibold text-slate-900 text-mono">
                                                 {formatCurrency(order.dp_desain_amount + order.dp_produksi_amount + order.pelunasan_amount)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between text-sm pt-2 border-t border-brand-200">
-                                            <span className="text-slate-700 font-medium">Sisa Tagihan</span>
+                                        <div className="flex justify-between gap-[8px] border-t border-slate-200 pt-[8px] text-base">
+                                            <span className="font-medium text-slate-700">Sisa Tagihan</span>
                                             {(() => {
                                                 const totalDibayar = order.dp_desain_amount + order.dp_produksi_amount + order.pelunasan_amount
                                                 const sisaTagihan = orderInvoice.total - totalDibayar
                                                 return (
-                                                    <span className={`font-bold ${sisaTagihan > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                    <span className="font-semibold text-slate-900 text-mono">
                                                         {formatCurrency(sisaTagihan)}
                                                     </span>
                                                 )
                                             })()}
                                         </div>
                                     </div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                    <div className="mt-[12px] grid grid-cols-2 gap-[8px]">
                                         <Link
                                             href={`/invoices/${orderInvoice.id}`}
-                                            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-brand-600 text-white text-sm font-medium hover:bg-brand-700 transition-colors"
+                                            className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                         >
                                             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -1333,7 +1282,7 @@ export default function OrderDetailModal({
                                         <InvoicePreviewButton
                                             invoiceId={orderInvoice.id}
                                             label="Lihat"
-                                            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-brand-200 bg-white text-brand-700 text-sm font-medium hover:bg-brand-50 transition-colors"
+                                            className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                         />
                                     </div>
                                 </div>
@@ -1341,24 +1290,25 @@ export default function OrderDetailModal({
 
                             {/* Create Invoice Button - Show if invoice doesn't exist yet (accessible from any stage) */}
                             {!orderInvoice && (
-                                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <div className="mb-[12px] flex items-center justify-between gap-[8px]">
+                                        <div className="flex items-center gap-[8px]">
                                             <svg className="w-5 h-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                             </svg>
-                                            <span className="text-sm font-semibold text-amber-800">Invoice</span>
+                                            <span className="text-lg font-semibold text-slate-900">Invoice</span>
                                         </div>
-                                        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                                        <span className="inline-flex items-center gap-[6px] rounded-full border border-amber-200 bg-amber-50 px-[8px] py-[2px] text-sm font-medium text-amber-700">
+                                            <span className="h-[6px] w-[6px] rounded-full bg-amber-500" aria-hidden="true" />
                                             Belum dibuat
                                         </span>
                                     </div>
-                                    <p className="text-sm text-slate-600 mb-3">
+                                    <p className="mb-[12px] text-base text-slate-600">
                                         Invoice bisa dibuat kapan saja, termasuk sebelum design selesai.
                                     </p>
                                     <Link
                                         href={`/invoices/new?order_id=${order.id}`}
-                                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
+                                        className="flex min-h-[44px] w-full items-center justify-center gap-[8px] rounded-md border border-brand-200 bg-brand-50 px-[16px] text-sm font-semibold text-brand-700 transition-colors hover:bg-brand-100 md:min-h-[38px]"
                                     >
                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1370,28 +1320,25 @@ export default function OrderDetailModal({
 
                             {/* Deposit Desain - Show only at customer_dp_desain stage OR if already verified */}
                             {(order.stage === 'customer_dp_desain' || order.dp_desain_verified) && (
-                                <div className={`p-4 rounded-xl space-y-3 ${order.stage === 'customer_dp_desain'
-                                    ? 'bg-rose-50 border border-rose-200'
-                                    : 'bg-slate-50'
-                                    }`}>
+                                <div className={`space-y-[12px] rounded-lg border bg-white p-[16px] ${order.stage === 'customer_dp_desain' ? 'border-amber-200' : 'border-slate-200'}`}>
                                     {order.stage === 'customer_dp_desain' && (
-                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Tindakan saat ini</p>
+                                        <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">Tindakan saat ini</p>
                                     )}
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-sm font-medium text-slate-900">Deposit Desain</p>
+                                    <div className="flex items-center justify-between gap-[8px]">
+                                        <p className="text-lg font-semibold text-slate-900">Deposit Desain</p>
                                         {getPaymentBadge(order.dp_desain_verified, order.dp_desain_amount)}
                                     </div>
 
                                     {order.dp_desain_verified ? (
                                         editingDP === 'dp_desain' ? (
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-[8px]">
                                                 <div className="flex-1">
                                                     <CurrencyInput
                                                         value={parseFloat(editDPAmount) || 0}
                                                         onChange={(v) => setEditDPAmount(String(v))}
                                                         showPrefix={false}
                                                         autoFocus
-                                                        className="!py-2 !pl-4 rounded-lg bg-white border-amber-300 focus:!ring-2 focus:!ring-amber-500/40"
+                                                        className="min-h-[44px] md:min-h-[38px]"
                                                     />
                                                 </div>
                                                 <button
@@ -1406,24 +1353,25 @@ export default function OrderDetailModal({
                                                         } catch { toast.error('Gagal koreksi') } finally { setSavingCorrection(false) }
                                                     }}
                                                     disabled={savingCorrection}
-                                                    className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                                                    className="btn-primary min-h-[44px] md:min-h-[38px]"
                                                 >
                                                     {savingCorrection ? '...' : 'Simpan'}
                                                 </button>
                                                 <button
                                                     onClick={() => setEditingDP(null)}
-                                                    className="px-3 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-300"
+                                                    className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                                 >
                                                     Batal
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-lg font-bold text-emerald-400">{formatCurrency(order.dp_desain_amount)}</p>
+                                            <div className="flex items-center gap-[8px]">
+                                                <p className="text-2xl font-semibold text-slate-900 text-mono">{formatCurrency(order.dp_desain_amount)}</p>
                                                 <button
                                                     onClick={() => { setEditingDP('dp_desain'); setEditDPAmount(String(order.dp_desain_amount)) }}
-                                                    className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+                                                    className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[32px] md:w-[32px]"
                                                     title="Koreksi nominal"
+                                                    aria-label="Koreksi nominal deposit desain"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1432,13 +1380,13 @@ export default function OrderDetailModal({
                                             </div>
                                         )
                                     ) : (
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-[8px]">
                                             <div className="flex-1">
                                                 <CurrencyInput
                                                     value={parseInt(dpDesainAmount || String(order.dp_desain_amount || '0')) || 0}
                                                     onChange={(v) => setDpDesainAmount(String(v))}
                                                     placeholder="0"
-                                                    className="!py-2"
+                                                    className="min-h-[44px] md:min-h-[38px]"
                                                 />
                                             </div>
                                             <button
@@ -1451,7 +1399,7 @@ export default function OrderDetailModal({
                                                     await handleVerifyPayment('dp_desain', amount)
                                                 }}
                                                 disabled={loading}
-                                                className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-600 disabled:opacity-50 whitespace-nowrap"
+                                                className="btn-primary min-h-[44px] whitespace-nowrap md:min-h-[38px]"
                                             >
                                                 Simpan & Verify
                                             </button>
@@ -1462,19 +1410,14 @@ export default function OrderDetailModal({
 
                             {/* DP Produksi - Show only at dp_produksi stage OR if already verified */}
                             {(order.stage === 'dp_produksi' || order.dp_produksi_verified) && (
-                                <div className={`p-4 rounded-xl space-y-3 ${order.stage === 'dp_produksi'
-                                    ? 'bg-rose-50 border border-rose-200'
-                                    : GATEKEEPER_STAGES.includes('dp_produksi')
-                                        ? 'bg-amber-500/10 border border-amber-500/30'
-                                        : 'bg-slate-50'
-                                    }`}>
+                                <div className={`space-y-[12px] rounded-lg border bg-white p-[16px] ${order.stage === 'dp_produksi' ? 'border-amber-200' : 'border-slate-200'}`}>
                                     {order.stage === 'dp_produksi' && (
-                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Tindakan saat ini</p>
+                                        <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">Tindakan saat ini</p>
                                     )}
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-slate-900">DP Produksi</p>
-                                            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <div className="flex items-center justify-between gap-[8px]">
+                                        <div className="flex items-center gap-[8px]">
+                                            <p className="text-lg font-semibold text-slate-900">DP Produksi</p>
+                                            <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                             </svg>
                                         </div>
@@ -1483,13 +1426,13 @@ export default function OrderDetailModal({
 
                                     {order.dp_produksi_verified ? (
                                         editingDP === 'dp_produksi' ? (
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-[8px]">
                                                 <div className="flex-1">
                                                     <CurrencyInput
                                                         value={parseFloat(editDPAmount) || 0}
                                                         onChange={(v) => setEditDPAmount(String(v))}
                                                         showPrefix={false}
-                                                        className="!py-2 !pl-4 rounded-lg bg-white border-amber-300 focus:!ring-2 focus:!ring-amber-500/40"
+                                                        className="min-h-[44px] md:min-h-[38px]"
                                                         autoFocus
                                                     />
                                                 </div>
@@ -1505,24 +1448,25 @@ export default function OrderDetailModal({
                                                         } catch { toast.error('Gagal koreksi') } finally { setSavingCorrection(false) }
                                                     }}
                                                     disabled={savingCorrection}
-                                                    className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                                                    className="btn-primary min-h-[44px] md:min-h-[38px]"
                                                 >
                                                     {savingCorrection ? '...' : 'Simpan'}
                                                 </button>
                                                 <button
                                                     onClick={() => setEditingDP(null)}
-                                                    className="px-3 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-300"
+                                                    className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                                 >
                                                     Batal
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-lg font-bold text-emerald-400">{formatCurrency(order.dp_produksi_amount)}</p>
+                                            <div className="flex items-center gap-[8px]">
+                                                <p className="text-2xl font-semibold text-slate-900 text-mono">{formatCurrency(order.dp_produksi_amount)}</p>
                                                 <button
                                                     onClick={() => { setEditingDP('dp_produksi'); setEditDPAmount(String(order.dp_produksi_amount)) }}
-                                                    className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+                                                    className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[32px] md:w-[32px]"
                                                     title="Koreksi nominal"
+                                                    aria-label="Koreksi nominal DP produksi"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1533,27 +1477,27 @@ export default function OrderDetailModal({
                                     ) : (
                                         <>
                                             {/* Kalkulator DP Produksi - bantu hitung minimal DP 50% */}
-                                            <div className="p-3 rounded-lg bg-white border border-amber-200 space-y-2">
-                                                <div className="flex justify-between text-sm">
+                                            <div className="space-y-[8px] rounded-md border border-slate-200 bg-slate-50 p-[12px]">
+                                                <div className="flex justify-between gap-[8px] text-base">
                                                     <span className="text-slate-600">Total Invoice</span>
-                                                    <span className="font-semibold text-slate-900">{formatCurrency(totalInvoice)}</span>
+                                                    <span className="font-semibold text-slate-900 text-mono">{formatCurrency(totalInvoice)}</span>
                                                 </div>
-                                                <div className="flex justify-between text-sm">
+                                                <div className="flex justify-between gap-[8px] text-base">
                                                     <span className="text-slate-600">Minimal DP (50%)</span>
-                                                    <span className="font-bold text-amber-600">{formatCurrency(dpProduksiMinimal)}</span>
+                                                    <span className="font-semibold text-slate-900 text-mono">{formatCurrency(dpProduksiMinimal)}</span>
                                                 </div>
-                                                <div className="flex justify-between text-sm pt-2 border-t border-amber-200">
+                                                <div className="flex justify-between gap-[8px] border-t border-slate-200 pt-[8px] text-base">
                                                     <span className="text-slate-600">Sisa setelah DP</span>
-                                                    <span className={`font-semibold ${sisaSetelahDP > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                                    <span className="font-semibold text-slate-900 text-mono">
                                                         {formatCurrency(sisaSetelahDP)}
                                                     </span>
                                                 </div>
-                                                <div className="flex gap-2 pt-1">
+                                                <div className="flex gap-[8px] pt-[4px]">
                                                     <button
                                                         type="button"
                                                         onClick={() => setDpProduksiAmount(String(dpProduksiMinimal))}
                                                         disabled={loading}
-                                                        className="flex-1 px-2 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-medium hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                                                        className="btn-secondary flex-1 min-h-[44px] md:min-h-[36px]"
                                                     >
                                                         Isi 50% (Minimal)
                                                     </button>
@@ -1561,20 +1505,20 @@ export default function OrderDetailModal({
                                                         type="button"
                                                         onClick={() => setDpProduksiAmount(String(totalInvoice))}
                                                         disabled={loading}
-                                                        className="flex-1 px-2 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-xs font-medium hover:bg-amber-200 disabled:opacity-50 transition-colors"
+                                                        className="btn-secondary flex-1 min-h-[44px] md:min-h-[36px]"
                                                     >
                                                         Isi 100%
                                                     </button>
                                                 </div>
                                             </div>
 
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-[8px]">
                                                 <div className="flex-1">
                                                     <CurrencyInput
                                                         value={parseInt(dpProduksiAmount || String(order.dp_produksi_amount || '0')) || 0}
                                                         onChange={(v) => setDpProduksiAmount(String(v))}
                                                         placeholder="0"
-                                                        className="!py-2"
+                                                        className="min-h-[44px] md:min-h-[38px]"
                                                     />
                                                 </div>
                                                 <button
@@ -1587,7 +1531,7 @@ export default function OrderDetailModal({
                                                         await handleVerifyPayment('dp_produksi', amount)
                                                     }}
                                                     disabled={loading}
-                                                    className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-600 disabled:opacity-50 whitespace-nowrap"
+                                                    className="btn-primary min-h-[44px] whitespace-nowrap md:min-h-[38px]"
                                                 >
                                                     Simpan & Verify
                                                 </button>
@@ -1599,19 +1543,14 @@ export default function OrderDetailModal({
 
                             {/* Pelunasan - Show only at pelunasan stage OR if already verified */}
                             {(order.stage === 'pelunasan' || order.pelunasan_verified) && (
-                                <div className={`p-4 rounded-xl space-y-3 ${order.stage === 'pelunasan'
-                                    ? 'bg-rose-50 border border-rose-200'
-                                    : GATEKEEPER_STAGES.includes('pelunasan')
-                                        ? 'bg-amber-500/10 border border-amber-500/30'
-                                        : 'bg-slate-50'
-                                    }`}>
+                                <div className={`space-y-[12px] rounded-lg border bg-white p-[16px] ${order.stage === 'pelunasan' ? 'border-amber-200' : 'border-slate-200'}`}>
                                     {order.stage === 'pelunasan' && (
-                                        <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-700">Tindakan saat ini</p>
+                                        <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">Tindakan saat ini</p>
                                     )}
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-sm font-medium text-slate-900">Pelunasan</p>
-                                            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <div className="flex items-center justify-between gap-[8px]">
+                                        <div className="flex items-center gap-[8px]">
+                                            <p className="text-lg font-semibold text-slate-900">Pelunasan</p>
+                                            <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                             </svg>
                                         </div>
@@ -1620,13 +1559,13 @@ export default function OrderDetailModal({
 
                                     {order.pelunasan_verified ? (
                                         editingDP === 'pelunasan' ? (
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-[8px]">
                                                 <div className="flex-1">
                                                     <CurrencyInput
                                                         value={parseFloat(editDPAmount) || 0}
                                                         onChange={(v) => setEditDPAmount(String(v))}
                                                         showPrefix={false}
-                                                        className="!py-2 !pl-4 rounded-lg bg-white border-amber-300 focus:!ring-2 focus:!ring-amber-500/40"
+                                                        className="min-h-[44px] md:min-h-[38px]"
                                                     />
                                                 </div>
                                                 <button
@@ -1641,24 +1580,25 @@ export default function OrderDetailModal({
                                                         } catch { toast.error('Gagal koreksi') } finally { setSavingCorrection(false) }
                                                     }}
                                                     disabled={savingCorrection}
-                                                    className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+                                                    className="btn-primary min-h-[44px] md:min-h-[38px]"
                                                 >
                                                     {savingCorrection ? '...' : 'Simpan'}
                                                 </button>
                                                 <button
                                                     onClick={() => setEditingDP(null)}
-                                                    className="px-3 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-300"
+                                                    className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                                 >
                                                     Batal
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-lg font-bold text-emerald-400">{formatCurrency(order.pelunasan_amount)}</p>
+                                            <div className="flex items-center gap-[8px]">
+                                                <p className="text-2xl font-semibold text-slate-900 text-mono">{formatCurrency(order.pelunasan_amount)}</p>
                                                 <button
                                                     onClick={() => { setEditingDP('pelunasan'); setEditDPAmount(String(order.pelunasan_amount)) }}
-                                                    className="p-1 rounded-md hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+                                                    className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[32px] md:w-[32px]"
                                                     title="Koreksi nominal"
+                                                    aria-label="Koreksi nominal pelunasan"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -1667,13 +1607,13 @@ export default function OrderDetailModal({
                                             </div>
                                         )
                                     ) : (
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-[8px]">
                                             <div className="flex-1">
                                                 <CurrencyInput
                                                     value={parseInt(pelunasanAmount || String(order.pelunasan_amount || '0')) || 0}
                                                     onChange={(v) => setPelunasanAmount(String(v))}
                                                     placeholder="0"
-                                                    className="!py-2"
+                                                    className="min-h-[44px] md:min-h-[38px]"
                                                 />
                                             </div>
                                             <button
@@ -1686,7 +1626,7 @@ export default function OrderDetailModal({
                                                     await handleVerifyPayment('pelunasan', amount)
                                                 }}
                                                 disabled={loading}
-                                                className="px-4 py-2 rounded-lg bg-emerald-500 text-slate-900 font-medium hover:bg-emerald-600 disabled:opacity-50 whitespace-nowrap"
+                                                className="btn-primary min-h-[44px] whitespace-nowrap md:min-h-[38px]"
                                             >
                                                 Simpan & Verify
                                             </button>
@@ -1696,9 +1636,9 @@ export default function OrderDetailModal({
                             )}
 
                             {/* Total */}
-                            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
-                                <p className="text-sm text-slate-500">Total Pembayaran</p>
-                                <p className="text-2xl font-bold text-emerald-400">
+                            <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Total Pembayaran</p>
+                                <p className="mt-[4px] text-2xl font-semibold text-slate-900 text-mono">
                                     {formatCurrency(order.dp_desain_amount + order.dp_produksi_amount + order.pelunasan_amount)}
                                 </p>
                             </div>
@@ -1707,37 +1647,38 @@ export default function OrderDetailModal({
 
                     {/* Stage Tab */}
                     {activeTab === 'stage' && (
-                        <div className="space-y-4">
+                        <div className="space-y-[16px]">
                             {/* Stage saat ini & berikutnya digabung agar ringkas */}
-                            <div className="rounded-xl border border-slate-200 bg-white p-4">
-                                <div className="flex items-center justify-between gap-3">
+                            <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                <div className="flex items-center justify-between gap-[12px]">
                                     <div className="min-w-0">
-                                        <p className="text-xs text-slate-500">Stage Saat Ini</p>
+                                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Stage Saat Ini</p>
                                         <p className="text-lg font-semibold text-slate-900 truncate">
                                             {STAGE_LABELS[order.stage]}
                                         </p>
                                     </div>
-                                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium ${isReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    <span className={`inline-flex shrink-0 items-center gap-[6px] rounded-full border px-[8px] py-[2px] text-sm font-medium ${isReady ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                                        <span className={`h-[6px] w-[6px] rounded-full ${isReady ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
                                         {isReady ? 'Siap lanjut' : 'Belum selesai'}
                                     </span>
                                 </div>
                                 {nextStage && (
-                                    <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2 text-sm">
-                                        <span className="text-slate-500 shrink-0">Berikutnya</span>
-                                        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <div className="mt-[12px] flex items-center gap-[8px] border-t border-slate-200 pt-[12px] text-base">
+                                        <span className="shrink-0 text-slate-500">Berikutnya</span>
+                                        <svg className="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                                         </svg>
-                                        <span className="font-medium text-slate-700 truncate">{STAGE_LABELS[nextStage]}</span>
+                                        <span className="truncate font-semibold text-slate-900">{STAGE_LABELS[nextStage]}</span>
                                     </div>
                                 )}
                             </div>
 
                             {/* Invoice & DP Status Checklist for dp_produksi stage */}
                             {order.stage === 'dp_produksi' && (
-                                <div className="space-y-2">
+                                <div className="space-y-[8px]">
                                     {/* Invoice Status Row */}
-                                    <div className={`p-3 rounded-lg flex flex-wrap items-center justify-between gap-2 ${orderInvoice ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-                                        <div className="flex items-center gap-2 min-w-0">
+                                    <div className="flex flex-wrap items-center justify-between gap-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
+                                        <div className="flex min-w-0 items-center gap-[8px]">
                                             {orderInvoice ? (
                                                 <svg className="w-5 h-5 shrink-0 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1747,33 +1688,33 @@ export default function OrderDetailModal({
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                 </svg>
                                             )}
-                                            <span className={`font-medium ${orderInvoice ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                            <span className="text-lg font-semibold text-slate-900">
                                                 Invoice
                                             </span>
                                             {orderInvoice && (
-                                                <span className="text-sm text-slate-500 font-mono truncate">{orderInvoice.no_invoice}</span>
+                                                <span className="truncate text-base text-slate-500 text-mono">{orderInvoice.no_invoice}</span>
                                             )}
                                         </div>
                                         {orderInvoice ? (
                                             /* Dua tombol dibungkus satu grup: kalau tidak muat (mis. layar 360 px), grup turun
                                                utuh ke baris berikutnya di dalam kartu — bukan melipat atau terpotong. */
-                                            <div className="flex gap-2 shrink-0 ml-auto">
+                                            <div className="ml-auto flex shrink-0 gap-[8px]">
                                                 <Link
                                                     href={`/invoices/${orderInvoice.id}`}
-                                                    className="flex items-center justify-center px-3 py-1 text-xs font-medium rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors"
+                                                    className="btn-secondary min-h-[44px] md:min-h-[36px]"
                                                 >
                                                     Edit
                                                 </Link>
                                                 <InvoicePreviewButton
                                                     invoiceId={orderInvoice.id}
                                                     label="Lihat"
-                                                    className="flex items-center justify-center gap-1.5 px-3 py-1 text-xs font-medium rounded-lg border border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                                    className="btn-secondary min-h-[44px] md:min-h-[36px]"
                                                 />
                                             </div>
                                         ) : (
                                             <Link
                                                 href={`/invoices/new?order_id=${order.id}`}
-                                                className="px-3 py-1 text-xs font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+                                                className="btn-secondary min-h-[44px] md:min-h-[36px]"
                                             >
                                                 + Buat
                                             </Link>
@@ -1781,8 +1722,8 @@ export default function OrderDetailModal({
                                     </div>
 
                                     {/* DP Produksi Status Row */}
-                                    <div className={`p-3 rounded-lg flex items-center justify-between ${order.dp_produksi_verified ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-                                        <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center justify-between gap-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
+                                        <div className="flex items-center gap-[8px]">
                                             {order.dp_produksi_verified ? (
                                                 <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1792,11 +1733,12 @@ export default function OrderDetailModal({
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                 </svg>
                                             )}
-                                            <span className={`font-medium ${order.dp_produksi_verified ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                            <span className="text-lg font-semibold text-slate-900">
                                                 DP Produksi
                                             </span>
                                         </div>
-                                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${order.dp_produksi_verified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        <span className={`inline-flex shrink-0 items-center gap-[6px] rounded-full border px-[8px] py-[2px] text-sm font-medium ${order.dp_produksi_verified ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                                            <span className={`h-[6px] w-[6px] rounded-full ${order.dp_produksi_verified ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
                                             {order.dp_produksi_verified ? '✓ Verified' : 'Belum diverifikasi'}
                                         </span>
                                     </div>
@@ -1805,8 +1747,8 @@ export default function OrderDetailModal({
                                     {(() => {
                                         const hasFormOrder = hasFormOrderData(order)
                                         return (
-                                            <div className={`p-3 rounded-lg flex items-center justify-between ${hasFormOrder ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
-                                                <div className="flex items-center gap-2">
+                                            <div className="flex flex-wrap items-center justify-between gap-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
+                                                <div className="flex items-center gap-[8px]">
                                                     {hasFormOrder ? (
                                                         <svg className="w-5 h-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1816,11 +1758,12 @@ export default function OrderDetailModal({
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                                         </svg>
                                                     )}
-                                                    <span className={`font-medium ${hasFormOrder ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                                    <span className="text-lg font-semibold text-slate-900">
                                                         Form Order
                                                     </span>
                                                 </div>
-                                                <span className={`text-xs font-medium px-2 py-1 rounded-full ${hasFormOrder ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                                <span className={`inline-flex shrink-0 items-center gap-[6px] rounded-full border px-[8px] py-[2px] text-sm font-medium ${hasFormOrder ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                                                    <span className={`h-[6px] w-[6px] rounded-full ${hasFormOrder ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
                                                     {hasFormOrder ? '✓ Sudah diisi' : 'Belum diisi'}
                                                 </span>
                                             </div>
@@ -1831,7 +1774,7 @@ export default function OrderDetailModal({
                                     {(() => {
                                         if (orderInvoice && order.dp_produksi_verified && hasFormOrderData(order)) return null
                                         return (
-                                            <p className="text-xs text-slate-500 text-center py-2">
+                                            <p className="py-[8px] text-center text-base text-slate-500">
                                                 {!orderInvoice ? 'Buat Invoice terlebih dahulu' :
                                                     !order.dp_produksi_verified ? 'Verifikasi DP di Tab Bayar' :
                                                         'Isi Form Order di Tab Form Order untuk melanjutkan'}
@@ -1844,49 +1787,50 @@ export default function OrderDetailModal({
 
                             {/* Layout Section - Show from proses_layout onwards */}
                             {['proses_layout', 'dp_produksi', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
-                                <div className="border border-slate-200 rounded-xl p-4 bg-white">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <div className="mb-[12px] flex items-center justify-between gap-[8px]">
+                                        <div className="flex items-center gap-[8px]">
+                                            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                             </svg>
-                                            <p className="text-sm font-medium text-slate-900">
+                                            <p className="text-lg font-semibold text-slate-900">
                                                 File Layout
                                             </p>
                                         </div>
                                         {(layoutFiles.some((file) => file.status === 'ready') || order.layout_url) && (
-                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+                                            <span className="inline-flex shrink-0 items-center gap-[6px] rounded-full border border-emerald-200 bg-emerald-50 px-[8px] py-[2px] text-sm font-medium text-emerald-700">
+                                                <span className="h-[6px] w-[6px] rounded-full bg-emerald-500" aria-hidden="true" />
                                                 ✓ Tersimpan
                                             </span>
                                         )}
                                     </div>
 
-                                    <div className="space-y-2">
-                                        {layoutFilesLoading ? <p className="text-xs text-slate-500">Memuat file layout...</p> : layoutFiles.map((file) => (
-                                            <div key={file.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2.5">
+                                    <div className="space-y-[8px]">
+                                        {layoutFilesLoading ? <p className="text-base text-slate-500">Memuat file layout...</p> : layoutFiles.map((file) => (
+                                            <div key={file.id} className="flex flex-wrap items-center gap-[8px] rounded-md border border-slate-200 bg-slate-50 px-[12px] py-[10px]">
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium text-slate-800">{file.originalName}</p>
-                                                    <p className="text-xs text-slate-500">{formatFileSize(file.sizeBytes)} · {file.status === 'ready' ? 'Tersedia' : file.status === 'uploading' ? 'Sedang diupload' : file.status === 'missing' ? 'Tidak ditemukan di R2' : file.status === 'failed' ? 'Gagal diupload' : 'Tidak tersedia'}</p>
+                                                    <p className="truncate text-base font-medium text-slate-800">{file.originalName}</p>
+                                                    <p className="text-sm text-slate-500">{formatFileSize(file.sizeBytes)} · {file.status === 'ready' ? 'Tersedia' : file.status === 'uploading' ? 'Sedang diupload' : file.status === 'missing' ? 'Tidak ditemukan di R2' : file.status === 'failed' ? 'Gagal diupload' : 'Tidak tersedia'}</p>
                                                 </div>
                                                 {file.status === 'ready' && <>
-                                                    <button onClick={() => void openLayoutFile(file, false)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Buka</button>
-                                                    <button onClick={() => void openLayoutFile(file, true)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Download</button>
-                                                    <button onClick={() => void handleCopyLayoutLink(file)} disabled={layoutBusy !== null} className="rounded-md border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-50">Salin Link</button>
-                                                    <button onClick={() => setLayoutFileToDelete(file)} disabled={layoutBusy !== null} className="rounded-md border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Hapus</button>
+                                                    <button onClick={() => void openLayoutFile(file, false)} disabled={layoutBusy !== null} className="btn-secondary min-h-[44px] md:min-h-[36px]">Buka</button>
+                                                    <button onClick={() => void openLayoutFile(file, true)} disabled={layoutBusy !== null} className="btn-secondary min-h-[44px] md:min-h-[36px]">Download</button>
+                                                    <button onClick={() => void handleCopyLayoutLink(file)} disabled={layoutBusy !== null} className="btn-secondary min-h-[44px] md:min-h-[36px]">Salin Link</button>
+                                                    <button onClick={() => setLayoutFileToDelete(file)} disabled={layoutBusy !== null} className="btn-secondary min-h-[44px] text-slate-600 hover:text-red-600 md:min-h-[36px]">Hapus</button>
                                                 </>}
                                             </div>
                                         ))}
-                                        {!layoutFilesLoading && layoutFiles.length === 0 && !order.layout_url && <p className="text-xs text-slate-400 italic">Belum ada file layout.</p>}
+                                        {!layoutFilesLoading && layoutFiles.length === 0 && !order.layout_url && <p className="text-base text-slate-500 italic">Belum ada file layout.</p>}
                                         {!layoutFilesLoading && layoutFiles.length === 0 && order.layout_url && (
-                                            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
-                                                <p className="flex-1 text-xs text-amber-800">File Layout Lama (Google Drive)</p>
-                                                <a href={order.layout_url} target="_blank" rel="noopener noreferrer" className="rounded-md border border-amber-300 px-2.5 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100">Buka File</a>
+                                            <div className="flex flex-wrap items-center gap-[8px] rounded-md border border-slate-200 bg-slate-50 px-[12px] py-[10px]">
+                                                <p className="flex-1 text-base text-slate-600">File Layout Lama (Google Drive)</p>
+                                                <a href={order.layout_url} target="_blank" rel="noopener noreferrer" className="btn-secondary min-h-[44px] md:min-h-[36px]">Buka File</a>
                                             </div>
                                         )}
                                         <>
                                             <input ref={layoutFileInputRef} type="file" className="hidden" onChange={(event) => void handleLayoutFileSelect(event)} />
-                                            <button onClick={() => layoutFileInputRef.current?.click()} disabled={layoutBusy === 'upload' || !order.brand_id} className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">{layoutFiles.length > 0 ? 'Ganti File' : 'Upload File Layout'}</button>
-                                            {layoutUploadProgress !== null && <div><div className="mb-1 flex justify-between text-xs text-slate-500"><span>Status upload</span><span>{layoutUploadProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${layoutUploadProgress}%` }} /></div></div>}
+                                            <button onClick={() => layoutFileInputRef.current?.click()} disabled={layoutBusy === 'upload' || !order.brand_id} className="btn-secondary w-full min-h-[44px] md:min-h-[38px]">{layoutFiles.length > 0 ? 'Ganti File' : 'Upload File Layout'}</button>
+                                            {layoutUploadProgress !== null && <div><div className="mb-[4px] flex justify-between text-sm text-slate-500"><span>Status upload</span><span className="text-mono">{layoutUploadProgress}%</span></div><div className="h-[8px] overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-500 transition-all" style={{ width: `${layoutUploadProgress}%` }} /></div></div>}
                                         </>
                                     </div>
 
@@ -1983,45 +1927,45 @@ export default function OrderDetailModal({
 
                             {/* Gambar Layout — pratinjau yang di-ACC customer di portal */}
                             {['proses_layout', 'antrean_produksi', 'print_press', 'cutting_jahit', 'packing', 'pelunasan', 'pengiriman'].includes(order.stage) && (
-                                <div className="border border-slate-200 rounded-xl p-4 bg-white">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <svg className="w-5 h-5 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <div className="mb-[12px] flex items-center justify-between gap-[8px]">
+                                        <div className="flex items-center gap-[8px]">
+                                            <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                             </svg>
-                                            <p className="text-sm font-medium text-slate-900">
+                                            <p className="text-lg font-semibold text-slate-900">
                                                 Gambar Layout (ACC Customer)
                                             </p>
                                         </div>
                                         {order.layout_approved_at ? (
-                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">✓ Disetujui</span>
+                                            <span className="inline-flex shrink-0 items-center gap-[6px] rounded-full border border-emerald-200 bg-emerald-50 px-[8px] py-[2px] text-sm font-medium text-emerald-700"><span className="h-[6px] w-[6px] rounded-full bg-emerald-500" aria-hidden="true" />✓ Disetujui</span>
                                         ) : order.layout_preview_url ? (
-                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">Menunggu ACC</span>
+                                            <span className="inline-flex shrink-0 items-center gap-[6px] rounded-full border border-amber-200 bg-amber-50 px-[8px] py-[2px] text-sm font-medium text-amber-700"><span className="h-[6px] w-[6px] rounded-full bg-amber-500" aria-hidden="true" />Menunggu ACC</span>
                                         ) : (
-                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-500">Belum ada</span>
+                                            <span className="inline-flex shrink-0 items-center gap-[6px] rounded-full border border-slate-200 bg-slate-50 px-[8px] py-[2px] text-sm font-medium text-slate-500"><span className="h-[6px] w-[6px] rounded-full bg-slate-400" aria-hidden="true" />Belum ada</span>
                                         )}
                                     </div>
 
-                                    <p className="text-xs text-slate-500 mb-3">
+                                    <p className="mb-[12px] text-base text-slate-500">
                                         Gambar ini ditampilkan ke customer di portal untuk disetujui. Upload gambar pratinjau layout (JPG/PNG).
                                     </p>
 
                                     {order.layout_preview_url && (
-                                        <div className="relative w-full h-40 rounded-lg overflow-hidden bg-slate-50 mb-3">
+                                        <div className="relative mb-[12px] h-40 w-full overflow-hidden rounded-md bg-slate-50">
                                             <div
                                                 className="absolute inset-0 cursor-zoom-in hover:opacity-95 transition-opacity"
                                                 onClick={() => setPreviewImage(order.layout_preview_url)}
                                             >
                                                 <Image src={order.layout_preview_url} alt="Gambar layout" fill className="object-contain" />
                                             </div>
-                                            <div className="absolute top-2 right-2">
+                                            <div className="absolute top-[8px] right-[8px]">
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowDeleteLayoutPreviewConfirm(true)}
                                                     disabled={deletingLayoutPreview || loading}
                                                     title="Hapus gambar layout"
                                                     aria-label="Hapus gambar layout"
-                                                    className="p-1.5 rounded bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    className="flex h-[44px] w-[44px] items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-red-600/90 disabled:cursor-not-allowed disabled:opacity-50 md:h-[32px] md:w-[32px]"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -2042,26 +1986,26 @@ export default function OrderDetailModal({
 
                             {/* Design Gatekeeper Warning for proses_desain */}
                             {order.stage === 'proses_desain' && !order.mockup_url && (
-                                <div className="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3">
-                                    <svg className="w-6 h-6 text-brand-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="flex items-center gap-[12px] rounded-lg border border-amber-200 bg-amber-50 p-[16px]">
+                                    <svg className="w-6 h-6 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
-                                    <div>
-                                        <p className="text-brand-600 font-medium">Desain belum diupload</p>
-                                        <p className="text-sm text-slate-500">Upload desain final untuk pindah ke DP Produksi</p>
+                                    <div className="min-w-0">
+                                        <p className="text-base font-semibold text-amber-800">Desain belum diupload</p>
+                                        <p className="text-base text-slate-600">Upload desain final untuk pindah ke DP Produksi</p>
                                     </div>
                                 </div>
                             )}
 
                             {/* Status respons customer dari portal */}
                             {order.layout_approved_at && (
-                                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3">
-                                    <svg className="w-6 h-6 text-emerald-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="flex items-center gap-[12px] rounded-lg border border-emerald-200 bg-emerald-50 p-[16px]">
+                                    <svg className="w-6 h-6 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
-                                    <div>
-                                        <p className="text-emerald-700 font-medium">Layout disetujui customer</p>
-                                        <p className="text-sm text-slate-500">
+                                    <div className="min-w-0">
+                                        <p className="text-base font-semibold text-emerald-700">Layout disetujui customer</p>
+                                        <p className="text-base text-slate-600">
                                             Disetujui via portal pada {formatDate(order.layout_approved_at)}
                                         </p>
                                     </div>
@@ -2069,13 +2013,13 @@ export default function OrderDetailModal({
                             )}
 
                             {!order.layout_approved_at && order.layout_revision_requested_at && (
-                                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
-                                    <svg className="w-6 h-6 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="flex items-center gap-[12px] rounded-lg border border-amber-200 bg-amber-50 p-[16px]">
+                                    <svg className="w-6 h-6 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.16 16.25A2 2 0 005 19z" />
                                     </svg>
-                                    <div>
-                                        <p className="text-amber-700 font-medium">Customer meminta revisi layout</p>
-                                        <p className="text-sm text-slate-500">
+                                    <div className="min-w-0">
+                                        <p className="text-base font-semibold text-amber-800">Customer meminta revisi layout</p>
+                                        <p className="text-base text-slate-600">
                                             {order.layout_revision_note || 'Tanpa catatan'} • {formatDate(order.layout_revision_requested_at)}
                                         </p>
                                     </div>
@@ -2085,19 +2029,20 @@ export default function OrderDetailModal({
                             {/* Upload desain final hanya di tahap desain. Di tahap lanjutan,
                                 mockup bisa diganti lewat kontrol di tab Detail. */}
                             {order.stage === 'proses_desain' && (
-                                <div className="p-4 rounded-xl bg-slate-50 space-y-3">
-                                    <p className="text-sm font-medium text-slate-900">Upload Desain Final</p>
+                                <div className="space-y-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="text-lg font-semibold text-slate-900">Upload Desain Final</p>
 
                                     {order.mockup_url && (
-                                        <div className="relative w-full h-40 rounded-lg overflow-hidden bg-white">
+                                        <div className="relative h-40 w-full overflow-hidden rounded-md bg-slate-50">
                                             <div
                                                 className="absolute inset-0 cursor-zoom-in hover:opacity-95 transition-opacity"
                                                 onClick={() => setPreviewImage(order.mockup_url)}
                                             >
                                                 <Image src={order.mockup_url} alt="Desain" fill className="object-contain" />
                                             </div>
-                                            <div className="absolute top-2 right-2 flex items-center gap-2">
-                                                <span className="px-2 py-1 rounded bg-emerald-500 text-slate-900 text-xs font-medium">
+                                            <div className="absolute top-[8px] right-[8px] flex items-center gap-[8px]">
+                                                <span className="inline-flex items-center gap-[6px] rounded-full border border-emerald-200 bg-emerald-50 px-[8px] py-[2px] text-sm font-medium text-emerald-700">
+                                                    <span className="h-[6px] w-[6px] rounded-full bg-emerald-500" aria-hidden="true" />
                                                     ✓ Uploaded
                                                 </span>
                                                 <button
@@ -2106,7 +2051,7 @@ export default function OrderDetailModal({
                                                     disabled={deletingMockup || loading}
                                                     title="Hapus desain"
                                                     aria-label="Hapus desain"
-                                                    className="p-1.5 rounded bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                    className="flex h-[44px] w-[44px] items-center justify-center rounded-md bg-black/60 text-white backdrop-blur-sm transition-colors hover:bg-red-600/90 disabled:cursor-not-allowed disabled:opacity-50 md:h-[32px] md:w-[32px]"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -2127,56 +2072,56 @@ export default function OrderDetailModal({
 
                             {/* Gatekeeper Warning */}
                             {(order.stage === 'dp_produksi' && !order.dp_produksi_verified) && (
-                                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
-                                    <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="flex items-center gap-[12px] rounded-lg border border-amber-200 bg-amber-50 p-[16px]">
+                                    <svg className="w-6 h-6 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                     </svg>
-                                    <div>
-                                        <p className="text-amber-400 font-medium">DP Produksi belum diverifikasi</p>
-                                        <p className="text-sm text-slate-500">Verifikasi pembayaran DP 50% terlebih dahulu</p>
+                                    <div className="min-w-0">
+                                        <p className="text-base font-semibold text-amber-800">DP Produksi belum diverifikasi</p>
+                                        <p className="text-base text-slate-600">Verifikasi pembayaran DP 50% terlebih dahulu</p>
                                     </div>
                                 </div>
                             )}
 
                             {(order.stage === 'pelunasan' && !order.pelunasan_verified) && (
-                                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3">
-                                    <svg className="w-6 h-6 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <div className="flex items-center gap-[12px] rounded-lg border border-amber-200 bg-amber-50 p-[16px]">
+                                    <svg className="w-6 h-6 shrink-0 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                     </svg>
-                                    <div>
-                                        <p className="text-amber-400 font-medium">Pelunasan belum diverifikasi</p>
-                                        <p className="text-sm text-slate-500">Verifikasi pembayaran penuh terlebih dahulu</p>
+                                    <div className="min-w-0">
+                                        <p className="text-base font-semibold text-amber-800">Pelunasan belum diverifikasi</p>
+                                        <p className="text-base text-slate-600">Verifikasi pembayaran penuh terlebih dahulu</p>
                                     </div>
                                 </div>
                             )}
 
                             {/* Tracking Number Input for Pengiriman Stage */}
                             {order.stage === 'pengiriman' && (
-                                <div className="p-4 rounded-xl bg-brand-500/10 border border-brand-500/30">
-                                    <p className="text-sm font-medium text-slate-900 mb-2">No. Resi / Tracking Number</p>
-                                    <div className="flex gap-2">
+                                <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
+                                    <p className="mb-[8px] text-lg font-semibold text-slate-900">No. Resi / Tracking Number</p>
+                                    <div className="flex gap-[8px]">
                                         <input
                                             type="text"
                                             value={trackingNumber}
                                             onChange={(e) => setTrackingNumber(e.target.value)}
                                             placeholder="JNE123456789"
-                                            className="flex-1 px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                                            className="input flex-1 font-mono min-h-[44px] md:min-h-[38px]"
                                         />
                                         <button
                                             onClick={handleSaveTrackingNumber}
                                             disabled={loading || !trackingNumber.trim()}
-                                            className="px-4 py-2 rounded-lg bg-brand-600 text-white font-medium hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                            className="btn-primary min-h-[44px] md:min-h-[38px]"
                                         >
                                             {loading ? 'Saving...' : 'Simpan'}
                                         </button>
                                     </div>
                                     {order.shipped_at && (
-                                        <p className="mt-2 text-xs text-emerald-600 font-medium">
+                                        <p className="mt-[8px] text-base font-medium text-emerald-600">
                                             ✓ Dikirim: {new Date(order.shipped_at).toLocaleDateString('id-ID')}
                                         </p>
                                     )}
                                     {!order.tracking_number && (
-                                        <p className="mt-2 text-xs text-amber-500">
+                                        <p className="mt-[8px] text-base text-amber-600">
                                             Isi no resi dan klik Simpan untuk menandai pesanan sudah dikirim
                                         </p>
                                     )}
@@ -2185,12 +2130,12 @@ export default function OrderDetailModal({
 
                             {/* Manual Stage Completion Toggle */}
                             {isManualStage && nextStage && (
-                                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                                <div className="flex items-center justify-between gap-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium text-slate-900">
+                                        <p className="text-base font-semibold text-slate-900">
                                             {layoutApprovedByCustomer ? 'Tahap selesai' : 'Tandai tahap selesai'}
                                         </p>
-                                        <p className="text-xs text-slate-500 mt-0.5">
+                                        <p className="mt-[2px] text-base text-slate-500">
                                             {layoutApprovedByCustomer
                                                 ? 'Otomatis dari ACC layout customer'
                                                 : isManualStageComplete()
@@ -2262,10 +2207,10 @@ export default function OrderDetailModal({
                                             }
                                         }}
                                         disabled={loading || layoutApprovedByCustomer}
-                                        className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'bg-emerald-500' : 'bg-slate-300'
+                                        className={`relative h-[28px] w-[44px] shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-60 ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'bg-emerald-500' : 'bg-slate-300'
                                             }`}
                                     >
-                                        <span className={`absolute top-1 left-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'translate-x-5' : ''
+                                        <span className={`absolute top-[4px] left-[4px] h-[20px] w-[20px] rounded-full bg-white shadow transition-transform ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'translate-x-[16px]' : ''
                                             }`} />
                                     </button>
                                 </div>
@@ -2273,13 +2218,13 @@ export default function OrderDetailModal({
 
                             {/* Aksi perpindahan tahap */}
                             {(nextStage || previousStage) && (
-                                <div className="space-y-1 pt-1">
+                                <div className="space-y-[4px] pt-[4px]">
                                     {nextStage && (
                                         <>
                                             <button
                                                 onClick={handleMoveToNextStage}
                                                 disabled={loading || !canMoveToNextStage()}
-                                                className="w-full py-3 px-4 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                                                className="flex min-h-[52px] w-full items-center justify-center gap-[8px] rounded-md bg-brand-600 px-[16px] text-base font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                                             >
                                                 {loading ? (
                                                     <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -2302,7 +2247,7 @@ export default function OrderDetailModal({
                                         <button
                                             onClick={() => setShowMoveBackConfirm(true)}
                                             disabled={loading}
-                                            className="w-full py-2 text-xs font-medium text-slate-500 hover:text-slate-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                                            className="flex min-h-[44px] w-full items-center justify-center gap-[6px] rounded-md text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
                                         >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5m0 0l5-5m-5 5h12" />
@@ -2314,8 +2259,8 @@ export default function OrderDetailModal({
                             )}
 
                             {order.stage === 'pengiriman' && (
-                                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
-                                    <p className="text-emerald-400 font-medium">🎉 Order sudah di tahap akhir!</p>
+                                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-[16px] text-center">
+                                    <p className="text-base font-semibold text-emerald-700">🎉 Order sudah di tahap akhir!</p>
                                 </div>
                             )}
                         </div>
@@ -2323,7 +2268,7 @@ export default function OrderDetailModal({
 
                     {/* Form Order Tab */}
                     {activeTab === 'form-order' && (
-                        <div className="space-y-4">
+                        <div className="space-y-[16px]">
                             <FormOrderEditor
                                 order={order}
                                 onSave={async (data) => {
@@ -2359,9 +2304,10 @@ export default function OrderDetailModal({
 
                             {/* Print Form Order Button */}
                             {hasFormOrderData(order) && (
-                                <div className="pt-2 border-t border-slate-200">
+                                <div className="border-t border-slate-200 pt-[16px]">
                                     <FormOrderDownloadButton
                                         order={order}
+                                        className="btn-secondary min-h-[44px] md:min-h-[38px]"
                                     />
                                 </div>
                             )}
@@ -2376,8 +2322,9 @@ export default function OrderDetailModal({
                     onClick={() => setPreviewImage(null)}
                 >
                     <button
-                        className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-[101]"
+                        className="absolute top-4 right-4 z-[101] flex h-[44px] w-[44px] items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
                         onClick={() => setPreviewImage(null)}
+                        aria-label="Tutup pratinjau"
                     >
                         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

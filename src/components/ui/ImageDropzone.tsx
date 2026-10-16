@@ -155,7 +155,7 @@ export default function ImageDropzone({
             <p className="text-sm font-medium text-slate-700">
                 {isDragging ? 'Lepaskan gambar di sini' : label}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-sm text-slate-500">
                 {enablePaste ? 'Tempel dengan Ctrl+V, tarik & lepas, atau klik' : 'Tarik & lepas, atau klik'}
                 {' · '}PNG, JPG, WEBP, GIF, SVG · maks {MAX_SIZE_MB}MB
             </p>

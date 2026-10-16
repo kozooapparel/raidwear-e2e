@@ -167,7 +167,7 @@ export default function CurrencyInput({
                 placeholder={placeholder}
                 disabled={disabled}
                 autoFocus={autoFocus}
-                className={`w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${showPrefix && !isFocused && displayValue ? 'pl-10' : ''} ${className}`}
+                className={`input w-full ${showPrefix && !isFocused && displayValue ? 'pl-10' : ''} ${className}`}
             />
             {name && (
                 <input type="hidden" name={name} value={rawValue === 0 ? '' : rawValue} required={required} />
