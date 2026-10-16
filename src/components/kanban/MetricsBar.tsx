@@ -17,6 +17,13 @@ interface MetricsBarProps {
 /** Kunci bulan (YYYY-MM) menurut waktu lokal admin, bukan UTC. */
 const monthKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 
+/**
+ * Kartu ringkasan papan. Angka diambil apa adanya dari sumbernya; yang diatur di
+ * sini hanya label & keterangan supaya beda populasi antar kartu terbaca jujur:
+ * kartu "Order Aktif" dihitung dari order yang tampil di papan (tanpa arsip),
+ * sedangkan "Belum Lunas" dan "Total Piutang" datang dari view dashboard_metrics
+ * yang menghitung SEMUA order, termasuk yang sudah diarsipkan.
+ */
 export default function MetricsBar({ metrics, orders }: MetricsBarProps) {
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('id-ID', {
@@ -43,7 +50,10 @@ export default function MetricsBar({ metrics, orders }: MetricsBarProps) {
         helper?: string
     }[] = [
         {
-            label: 'Total Orders',
+            // Label sengaja bukan "Total Orders": angkanya dihitung dari order yang
+            // tampil di papan (KanbanBoardWrapper menimpa total_active_orders dengan
+            // localOrders.length), jadi arsip tidak termasuk di sini.
+            label: 'Order Aktif',
             value: metrics.total_active_orders,
             icon: (
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
@@ -51,6 +61,7 @@ export default function MetricsBar({ metrics, orders }: MetricsBarProps) {
                 </svg>
             ),
             tone: 'info',
+            helper: 'Tidak termasuk arsip',
         },
         {
             label: 'Belum Lunas',
@@ -61,6 +72,8 @@ export default function MetricsBar({ metrics, orders }: MetricsBarProps) {
                 </svg>
             ),
             tone: 'warning',
+            // Angka dari view dashboard_metrics: SEMUA order dihitung, termasuk arsip.
+            helper: 'Termasuk order arsip',
         },
         {
             label: 'Total Piutang',
@@ -71,6 +84,8 @@ export default function MetricsBar({ metrics, orders }: MetricsBarProps) {
                 </svg>
             ),
             tone: 'success',
+            // Sama seperti "Belum Lunas": piutang menghitung order arsip juga.
+            helper: 'Termasuk order arsip',
         },
         {
             // Pengganti kartu "Bottleneck": arus order bulan berjalan dari

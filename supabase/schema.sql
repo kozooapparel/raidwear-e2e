@@ -38,7 +38,7 @@ CREATE INDEX idx_customers_name ON public.customers(name);
 
 -- =====================
 -- 3. TABEL ORDERS
--- 11-Stage Kanban + Order Data + Gatekeeper System
+-- 10-Stage Kanban + Order Data + Gatekeeper System
 -- =====================
 CREATE TABLE public.orders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -50,19 +50,18 @@ CREATE TABLE public.orders (
     mockup_url TEXT, -- URL gambar mockup dari Supabase Storage
     deadline DATE,
     
-    -- Kanban Stage (11 stages sesuai spesifikasi Section 3)
+    -- Kanban Stage (10 stages, sama dengan migration 20260829091920_sync_stage_constraint_to_ui.sql)
     stage TEXT NOT NULL DEFAULT 'customer_dp_desain' CHECK (stage IN (
         'customer_dp_desain',   -- 1. Customer DP Desain
         'proses_desain',        -- 2. Proses Desain
         'dp_produksi',          -- 3. DP Produksi (Gatekeeper - 50%)
-        'antrean_produksi',     -- 4. Antrean Produksi
-        'print_press',          -- 5. Print & Press
-        'cutting_bahan',        -- 6. Cutting Bahan
-        'jahit',                -- 7. Jahit (Bottleneck monitoring >3 hari)
-        'quality_control',      -- 8. Quality Control
-        'packing',              -- 9. Packing
-        'pelunasan',            -- 10. Pelunasan (Gatekeeper - Full payment)
-        'pengiriman'            -- 11. Pengiriman
+        'proses_layout',        -- 4. Proses Layout
+        'antrean_produksi',     -- 5. Antrean Produksi
+        'print_press',          -- 6. Print & Press
+        'cutting_jahit',        -- 7. Cutting & Jahit (Bottleneck monitoring >3 hari)
+        'packing',              -- 8. Packing
+        'pelunasan',            -- 9. Pelunasan (Gatekeeper - Full payment)
+        'pengiriman'            -- 10. Pengiriman
     )),
     
     -- Payment Fields (Gatekeeper System)
@@ -89,7 +88,7 @@ CREATE TABLE public.orders (
     shipped_at TIMESTAMPTZ,
     
     -- Bottleneck Tracking
-    stage_entered_at TIMESTAMPTZ DEFAULT NOW(), -- Untuk tracking >3 hari di Jahit
+    stage_entered_at TIMESTAMPTZ DEFAULT NOW(), -- Untuk tracking >3 hari di Cutting & Jahit
     
     -- Audit
     created_by UUID REFERENCES public.profiles(id),
@@ -227,6 +226,8 @@ CREATE POLICY "Authenticated users can delete orders"
 
 -- =====================
 -- 6. VIEWS (Dashboard Metrics Helper)
+-- Isi di bawah ini mengikuti migration 20260918010000_fix_dashboard_bottleneck_stage.sql:
+-- stage bottleneck adalah `cutting_jahit`, bukan lagi `jahit`.
 -- =====================
 
 -- View untuk dashboard metrics
@@ -235,10 +236,10 @@ SELECT
     COUNT(*) FILTER (WHERE stage != 'pengiriman') AS total_active_orders,
     COUNT(*) FILTER (WHERE NOT pelunasan_verified) AS total_unpaid_orders,
     COALESCE(SUM(dp_desain_amount + dp_produksi_amount + pelunasan_amount) FILTER (WHERE NOT pelunasan_verified), 0) AS total_receivables,
-    COUNT(*) FILTER (WHERE stage = 'jahit' AND stage_entered_at < NOW() - INTERVAL '3 days') AS bottleneck_count
+    COUNT(*) FILTER (WHERE stage = 'cutting_jahit' AND stage_entered_at < NOW() - INTERVAL '3 days') AS bottleneck_count
 FROM public.orders;
 
--- View untuk bottleneck orders (di Jahit > 3 hari)
+-- View untuk bottleneck orders (di Cutting & Jahit > 3 hari)
 CREATE VIEW public.bottleneck_orders AS
 SELECT 
     o.*,
@@ -247,7 +248,7 @@ SELECT
     EXTRACT(DAY FROM NOW() - o.stage_entered_at) AS days_in_stage
 FROM public.orders o
 JOIN public.customers c ON o.customer_id = c.id
-WHERE o.stage = 'jahit' 
+WHERE o.stage = 'cutting_jahit' 
 AND o.stage_entered_at < NOW() - INTERVAL '3 days';
 
 -- =====================
