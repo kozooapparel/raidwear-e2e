@@ -1663,14 +1663,92 @@ export default function OrderDetailModal({
                                 <div className="flex items-center justify-between gap-[12px]">
                                     <div className="min-w-0">
                                         <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Yang Perlu Dikerjakan</p>
-                                        <p className="text-lg font-semibold text-slate-900 truncate">
+                                        <p className="text-lg font-semibold text-slate-900">
                                             {stageReadiness?.action}
                                         </p>
+                                        {isManualStage && (layoutApprovedByCustomer || isManualStageComplete()) && (
+                                            <p className="mt-[2px] text-sm text-slate-500">
+                                                {layoutApprovedByCustomer ? 'Otomatis dari ACC layout customer' : 'Sudah ditandai selesai'}
+                                            </p>
+                                        )}
                                     </div>
-                                    <span className={`inline-flex shrink-0 items-center gap-[6px] rounded-full border px-[8px] py-[2px] text-sm font-medium ${isReady ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-                                        <span className={`h-[6px] w-[6px] rounded-full ${isReady ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
-                                        {stageReadiness?.label}
-                                    </span>
+                                    {isManualStage && nextStage ? (
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            aria-checked={layoutApprovedByCustomer || isManualStageComplete()}
+                                            aria-label="Tandai tahap selesai"
+                                            onClick={async () => {
+                                                setLoading(true)
+                                                try {
+                                                    const stage = order.stage as OrderStage
+                                                    let updateField = ''
+                                                    let timestampField = ''
+                                                    let currentValue = false
+
+                                                    switch (stage) {
+                                                        case 'proses_layout':
+                                                            updateField = 'layout_completed'
+                                                            timestampField = 'layout_completed_at'
+                                                            currentValue = order.layout_completed
+                                                            break
+                                                        case 'antrean_produksi':
+                                                            updateField = 'production_ready'
+                                                            timestampField = 'production_ready_at'
+                                                            currentValue = order.production_ready
+                                                            break
+                                                        case 'print_press':
+                                                            updateField = 'print_completed'
+                                                            timestampField = 'print_completed_at'
+                                                            currentValue = order.print_completed
+                                                            break
+                                                        case 'cutting_jahit':
+                                                            updateField = 'sewing_completed'
+                                                            timestampField = 'sewing_completed_at'
+                                                            currentValue = order.sewing_completed
+                                                            break
+                                                        case 'packing':
+                                                            updateField = 'packing_completed'
+                                                            timestampField = 'packing_completed_at'
+                                                            currentValue = order.packing_completed
+                                                            break
+                                                    }
+
+                                                    const newValue = !currentValue
+                                                    const updateData: Record<string, boolean | string | null> = {
+                                                        [updateField]: newValue,
+                                                        [timestampField]: newValue ? new Date().toISOString() : null
+                                                    }
+
+                                                    const { error } = await supabase
+                                                        .from('orders')
+                                                        .update(updateData)
+                                                        .eq('id', order.id)
+
+                                                    if (error) throw error
+                                                    // Refresh di tempat tanpa menutup modal agar admin
+                                                    // bisa lanjut kerja tanpa membuka order lagi.
+                                                    await syncLatestOrder()
+                                                } catch (err) {
+                                                    console.error('Toggle stage error:', err)
+                                                    toast.error('Gagal mengupdate status')
+                                                } finally {
+                                                    setLoading(false)
+                                                }
+                                            }}
+                                            disabled={loading || layoutApprovedByCustomer}
+                                            className={`relative h-[28px] w-[44px] shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-60 ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'bg-emerald-500' : 'bg-slate-300'
+                                                }`}
+                                        >
+                                            <span className={`absolute top-[4px] left-[4px] h-[20px] w-[20px] rounded-full bg-white shadow transition-transform ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'translate-x-[16px]' : ''
+                                                }`} />
+                                        </button>
+                                    ) : (
+                                        <span className={`inline-flex shrink-0 items-center gap-[6px] rounded-full border px-[8px] py-[2px] text-sm font-medium ${isReady ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                                            <span className={`h-[6px] w-[6px] rounded-full ${isReady ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
+                                            {stageReadiness?.label}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -2129,91 +2207,7 @@ export default function OrderDetailModal({
                                 </div>
                             )}
 
-                            {/* Manual Stage Completion Toggle */}
-                            {isManualStage && nextStage && (
-                                <div className="flex items-center justify-between gap-[12px] rounded-lg border border-slate-200 bg-white p-[16px]">
-                                    <div className="min-w-0">
-                                        <p className="text-base font-semibold text-slate-900">
-                                            {layoutApprovedByCustomer ? 'Tahap selesai' : 'Tandai tahap selesai'}
-                                        </p>
-                                        {(layoutApprovedByCustomer || isManualStageComplete()) && (
-                                            <p className="mt-[2px] text-base text-slate-500">
-                                                {layoutApprovedByCustomer ? 'Otomatis dari ACC layout customer' : 'Sudah ditandai selesai'}
-                                            </p>
-                                        )}
-                                    </div>
-                                    <button
-                                        type="button"
-                                        role="switch"
-                                        aria-checked={layoutApprovedByCustomer || isManualStageComplete()}
-                                        aria-label="Tandai tahap selesai"
-                                        onClick={async () => {
-                                            setLoading(true)
-                                            try {
-                                                const stage = order.stage as OrderStage
-                                                let updateField = ''
-                                                let timestampField = ''
-                                                let currentValue = false
 
-                                                switch (stage) {
-                                                    case 'proses_layout':
-                                                        updateField = 'layout_completed'
-                                                        timestampField = 'layout_completed_at'
-                                                        currentValue = order.layout_completed
-                                                        break
-                                                    case 'antrean_produksi':
-                                                        updateField = 'production_ready'
-                                                        timestampField = 'production_ready_at'
-                                                        currentValue = order.production_ready
-                                                        break
-                                                    case 'print_press':
-                                                        updateField = 'print_completed'
-                                                        timestampField = 'print_completed_at'
-                                                        currentValue = order.print_completed
-                                                        break
-                                                    case 'cutting_jahit':
-                                                        updateField = 'sewing_completed'
-                                                        timestampField = 'sewing_completed_at'
-                                                        currentValue = order.sewing_completed
-                                                        break
-                                                    case 'packing':
-                                                        updateField = 'packing_completed'
-                                                        timestampField = 'packing_completed_at'
-                                                        currentValue = order.packing_completed
-                                                        break
-                                                }
-
-                                                const newValue = !currentValue
-                                                const updateData: Record<string, boolean | string | null> = {
-                                                    [updateField]: newValue,
-                                                    [timestampField]: newValue ? new Date().toISOString() : null
-                                                }
-
-                                                const { error } = await supabase
-                                                    .from('orders')
-                                                    .update(updateData)
-                                                    .eq('id', order.id)
-
-                                                if (error) throw error
-                                                // Refresh di tempat tanpa menutup modal agar admin
-                                                // bisa lanjut kerja tanpa membuka order lagi.
-                                                await syncLatestOrder()
-                                            } catch (err) {
-                                                console.error('Toggle stage error:', err)
-                                                toast.error('Gagal mengupdate status')
-                                            } finally {
-                                                setLoading(false)
-                                            }
-                                        }}
-                                        disabled={loading || layoutApprovedByCustomer}
-                                        className={`relative h-[28px] w-[44px] shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 disabled:cursor-not-allowed disabled:opacity-60 ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'bg-emerald-500' : 'bg-slate-300'
-                                            }`}
-                                    >
-                                        <span className={`absolute top-[4px] left-[4px] h-[20px] w-[20px] rounded-full bg-white shadow transition-transform ${(layoutApprovedByCustomer || isManualStageComplete()) ? 'translate-x-[16px]' : ''
-                                            }`} />
-                                    </button>
-                                </div>
-                            )}
 
                             {/* Aksi perpindahan tahap */}
                             {(nextStage || previousStage) && (
