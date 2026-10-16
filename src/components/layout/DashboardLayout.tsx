@@ -188,13 +188,13 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
                 onClick={() => isMobile && setMobileMenuOpen(false)}
                 title={!isExpanded ? item.label : undefined}
                 aria-current={isActive ? 'page' : undefined}
-                className={`group flex items-center gap-[12px] px-[12px] py-[8px] min-h-[44px] lg:min-h-[36px] rounded-md text-[14px] transition-colors duration-150 focus-ring ${
+                className={`group flex items-center gap-[10px] px-[10px] min-h-[44px] lg:min-h-[40px] rounded-[8px] text-[14px] leading-[20px] transition-colors duration-150 focus-ring ${
                     isActive
-                        ? 'bg-brand-50 font-semibold text-brand-700'
-                        : 'font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900'
+                        ? 'bg-slate-100 font-semibold text-slate-900 [.dark_&]:bg-slate-800 [.dark_&]:text-slate-100'
+                        : 'font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 [.dark_&]:text-slate-300 [.dark_&]:hover:bg-slate-800 [.dark_&]:hover:text-slate-100'
                 } ${isExpanded ? '' : 'justify-center'}`}
             >
-                <span className={`flex-shrink-0 ${isActive ? 'text-brand-700' : 'text-slate-500 group-hover:text-slate-600'}`}>
+                <span className={`flex-shrink-0 ${isActive ? 'text-slate-900 [.dark_&]:text-slate-100' : 'text-slate-400 group-hover:text-slate-600 [.dark_&]:text-slate-500 [.dark_&]:group-hover:text-slate-300'}`}>
                     {item.icon}
                 </span>
                 <span className={`whitespace-nowrap transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 translate-x-0 w-auto' : 'opacity-0 -translate-x-2 w-0 overflow-hidden'}`}>
@@ -212,20 +212,20 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
     const sidebarContent = (
         <>
             {/* Logo */}
-            <div className="h-[56px] px-[12px] flex items-center gap-[12px] border-b border-slate-200 flex-shrink-0">
-                <div className="w-[40px] h-[40px] rounded-md bg-brand-gradient flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <div className={`h-[56px] px-[12px] flex items-center gap-[10px] border-b border-slate-200 [.dark_&]:border-slate-800 flex-shrink-0 ${isExpanded ? '' : 'justify-center'}`}>
+                <div className="w-[32px] h-[32px] rounded-[10px] bg-brand-gradient flex items-center justify-center flex-shrink-0 overflow-hidden">
                     {identity.logoUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={identity.logoUrl} alt={`${identity.name} logo`} className="w-full h-full object-contain bg-white p-[4px]" />
+                        <img src={identity.logoUrl} alt={`${identity.name} logo`} className="w-full h-full object-contain bg-white p-[3px]" />
                     ) : (
-                        <svg className="h-[20px] w-[20px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 0h.008v.008h-.008V7.5z" />
-                        </svg>
+                        <span className="text-white text-[16px] font-bold leading-none select-none" aria-hidden="true">
+                            {identity.name.charAt(0).toUpperCase()}
+                        </span>
                     )}
                 </div>
                 <div className={`overflow-hidden flex-1 transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 w-auto translate-x-0' : 'opacity-0 w-0 -translate-x-2'}`}>
-                    <h1 className="text-[14px] font-semibold text-slate-900 whitespace-nowrap tracking-tight">{identity.name}</h1>
-                    <p className="text-[12px] text-slate-500 whitespace-nowrap">Jersey Convection</p>
+                    <h1 className="text-[14px] font-bold text-slate-900 [.dark_&]:text-slate-100 whitespace-nowrap tracking-tight">{identity.name}</h1>
+                    <p className="text-[11px] text-slate-400 [.dark_&]:text-slate-500 whitespace-nowrap">Jersey Convection</p>
                 </div>
                 {isMobile && (
                     <button
@@ -239,10 +239,10 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 px-[12px] py-[12px] overflow-y-auto scrollbar-thin">
+            <nav className="flex-1 min-h-0 px-[12px] py-[12px] overflow-y-auto scrollbar-thin">
                 {sections.map((section) => (
-                    <div key={section.title} className="mb-[20px] last:mb-0">
-                        <p className={`pl-[44px] pr-[12px] mb-[8px] text-[12px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap transition-all duration-200 ${isExpanded ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'}`}>
+                    <div key={section.title} className="mb-[24px] last:mb-0">
+                        <p className={`pl-[40px] pr-[12px] mb-[6px] text-[11px] font-medium text-slate-400 uppercase tracking-[0.08em] [.dark_&]:text-slate-500 whitespace-nowrap transition-all duration-200 ${isExpanded ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'}`}>
                             {section.title}
                         </p>
                         <div className="space-y-[4px]">
@@ -253,16 +253,16 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
             </nav>
 
             {/* Bottom Section - User */}
-            <div className="p-[12px] border-t border-slate-200 flex-shrink-0">
-                <div className={`flex items-center gap-[12px] p-[8px] rounded-md ${isExpanded ? '' : 'justify-center'}`}>
-                    <div className="w-[32px] h-[32px] rounded-full bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200 flex items-center justify-center font-semibold text-[14px] flex-shrink-0">
+            <div className="p-[12px] border-t border-slate-200 [.dark_&]:border-slate-800 flex-shrink-0">
+                <div className={`flex items-center gap-[10px] px-[10px] py-[6px] rounded-[8px] ${isExpanded ? '' : 'justify-center'}`}>
+                    <div className="w-[32px] h-[32px] rounded-full bg-slate-100 [.dark_&]:bg-slate-800 text-slate-600 [.dark_&]:text-slate-300 ring-1 ring-inset ring-slate-200 [.dark_&]:ring-slate-700 flex items-center justify-center font-semibold text-[13px] flex-shrink-0">
                         {user?.full_name?.charAt(0)?.toUpperCase() || 'U'}
                     </div>
                     <div className={`flex-1 min-w-0 transition-all duration-200 ${isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'}`}>
-                        <p className="text-[14px] font-semibold text-slate-900 truncate whitespace-nowrap">
+                        <p className="text-[13px] font-semibold text-slate-900 [.dark_&]:text-slate-100 truncate whitespace-nowrap">
                             {user?.full_name || 'User'}
                         </p>
-                        <p className="text-[12px] text-slate-500 capitalize truncate whitespace-nowrap">
+                        <p className="text-[11px] text-slate-400 [.dark_&]:text-slate-500 capitalize truncate whitespace-nowrap">
                             {user?.role || 'admin'}
                         </p>
                     </div>
@@ -271,7 +271,7 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
                 <button
                     onClick={handleLogout}
                     title="Logout"
-                    className={`mt-[4px] w-full flex items-center gap-[12px] px-[12px] py-[8px] min-h-[44px] lg:min-h-[36px] rounded-md text-[14px] font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors focus-ring ${isExpanded ? '' : 'justify-center'}`}
+                    className={`mt-[2px] w-full flex items-center gap-[10px] px-[10px] min-h-[44px] lg:min-h-[40px] rounded-[8px] text-[14px] leading-[20px] font-medium text-slate-500 [.dark_&]:text-slate-400 hover:bg-slate-100 hover:text-slate-900 [.dark_&]:hover:bg-slate-800 [.dark_&]:hover:text-slate-100 transition-colors focus-ring ${isExpanded ? '' : 'justify-center'}`}
                 >
                     <span className="flex-shrink-0">{Icon.Logout}</span>
                     <span className={`whitespace-nowrap transition-all duration-200 ${isExpanded ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'}`}>
@@ -296,7 +296,7 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
             {/* Sidebar - Desktop */}
             {!isMobile && (
                 <aside
-                    className={`${sidebarOpen ? 'w-[224px]' : 'w-[68px]'} flex-shrink-0 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen transition-[width] duration-300 ease-in-out`}
+                    className={`${sidebarOpen ? 'w-[224px]' : 'w-[68px]'} flex-shrink-0 bg-white [.dark_&]:bg-slate-900 border-r border-slate-200 [.dark_&]:border-slate-800 flex flex-col sticky top-0 h-screen transition-[width] duration-300 ease-in-out`}
                     onMouseEnter={() => setSidebarOpen(true)}
                     onMouseLeave={() => setSidebarOpen(false)}
                 >
@@ -307,7 +307,7 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
             {/* Sidebar - Mobile */}
             {isMobile && (
                 <aside
-                    className={`fixed top-0 left-0 h-screen w-[252px] max-w-[85vw] bg-white z-50 flex flex-col shadow-xl transform transition-transform duration-300 ease-in-out ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                    className={`fixed top-0 left-0 h-screen w-[252px] max-w-[85vw] bg-white [.dark_&]:bg-slate-900 z-50 flex flex-col shadow-xl transform transition-transform duration-300 ease-in-out ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 >
                     {sidebarContent}
                 </aside>
@@ -317,26 +317,26 @@ export default function DashboardLayout({ user, children }: DashboardLayoutProps
             <main className="flex-1 min-w-0">
                 {/* Mobile Header */}
                 {isMobile && (
-                    <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200 px-[12px] py-[8px] flex items-center gap-[8px]">
+                    <div className="sticky top-0 z-30 bg-white/80 [.dark_&]:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 [.dark_&]:border-slate-800 px-[12px] py-[8px] flex items-center gap-[8px]">
                         <button
                             onClick={() => setMobileMenuOpen(true)}
-                            className="flex items-center justify-center h-[44px] w-[44px] -ml-[4px] rounded-md text-slate-600 hover:bg-slate-100 focus-ring"
+                            className="flex items-center justify-center h-[44px] w-[44px] -ml-[4px] rounded-md text-slate-600 [.dark_&]:text-slate-300 hover:bg-slate-100 [.dark_&]:hover:bg-slate-800 focus-ring"
                             aria-label="Buka menu"
                         >
                             {Icon.Menu}
                         </button>
                         <div className="flex items-center gap-[8px]">
-                            <div className="w-[32px] h-[32px] rounded-md bg-brand-gradient flex items-center justify-center overflow-hidden">
+                            <div className="w-[32px] h-[32px] rounded-[10px] bg-brand-gradient flex items-center justify-center overflow-hidden">
                                 {identity.logoUrl ? (
                                     // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={identity.logoUrl} alt={`${identity.name} logo`} className="w-full h-full object-contain bg-white p-[4px]" />
+                                    <img src={identity.logoUrl} alt={`${identity.name} logo`} className="w-full h-full object-contain bg-white p-[3px]" />
                                 ) : (
-                                    <svg className="h-[16px] w-[16px] text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 0h.008v.008h-.008V7.5z" />
-                                    </svg>
+                                    <span className="text-white text-[16px] font-bold leading-none select-none" aria-hidden="true">
+                                        {identity.name.charAt(0).toUpperCase()}
+                                    </span>
                                 )}
                             </div>
-                            <span className="text-[14px] font-semibold text-slate-900">{identity.name}</span>
+                            <span className="text-[14px] font-bold text-slate-900 [.dark_&]:text-slate-100">{identity.name}</span>
                         </div>
                     </div>
                 )}
