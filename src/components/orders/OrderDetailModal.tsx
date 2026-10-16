@@ -232,13 +232,13 @@ export default function OrderDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, order?.id, order?.brand_id])
 
-    // Determine if order is ready to move to next stage
-    const getStageReadiness = (): boolean => {
-        if (!order) return false
-        return getOrderStageReadiness(order, { hasInvoice: orderInvoice !== null }).isReady
-    }
+    // Kesiapan tahap ini dipakai chip kartu dan tombol pindah tahap; `action` menjelaskan
+    // apa yang perlu dikerjakan admin sekarang.
+    const stageReadiness = order
+        ? getOrderStageReadiness(order, { hasInvoice: orderInvoice !== null })
+        : null
 
-    const isReady = getStageReadiness()
+    const isReady = stageReadiness?.isReady ?? false
 
     if (!isOpen || !order) return null
     const handleLayoutFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -679,6 +679,16 @@ export default function OrderDetailModal({
         return new Date(date).toLocaleDateString('id-ID', {
             day: 'numeric',
             month: 'long',
+            year: 'numeric',
+        })
+    }
+
+    // Versi ringkas untuk baris status: "3 Okt 2026"
+    const formatDateCompact = (date: string | null) => {
+        if (!date) return '-'
+        return new Date(date).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'short',
             year: 'numeric',
         })
     }
@@ -1648,18 +1658,18 @@ export default function OrderDetailModal({
                     {/* Stage Tab */}
                     {activeTab === 'stage' && (
                         <div className="space-y-[16px]">
-                            {/* Stage saat ini & berikutnya digabung agar ringkas */}
+                            {/* Yang perlu dikerjakan & tahap berikutnya digabung agar ringkas */}
                             <div className="rounded-lg border border-slate-200 bg-white p-[16px]">
                                 <div className="flex items-center justify-between gap-[12px]">
                                     <div className="min-w-0">
-                                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Stage Saat Ini</p>
+                                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Yang Perlu Dikerjakan</p>
                                         <p className="text-lg font-semibold text-slate-900 truncate">
-                                            {STAGE_LABELS[order.stage]}
+                                            {stageReadiness?.action}
                                         </p>
                                     </div>
                                     <span className={`inline-flex shrink-0 items-center gap-[6px] rounded-full border px-[8px] py-[2px] text-sm font-medium ${isReady ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
                                         <span className={`h-[6px] w-[6px] rounded-full ${isReady ? 'bg-emerald-500' : 'bg-amber-500'}`} aria-hidden="true" />
-                                        {isReady ? 'Siap lanjut' : 'Belum selesai'}
+                                        {stageReadiness?.label}
                                     </span>
                                 </div>
                                 {nextStage && (
@@ -1820,7 +1830,7 @@ export default function OrderDetailModal({
                                                 </>}
                                             </div>
                                         ))}
-                                        {!layoutFilesLoading && layoutFiles.length === 0 && !order.layout_url && <p className="text-base text-slate-500 italic">Belum ada file layout.</p>}
+                                        {!layoutFilesLoading && layoutFiles.length === 0 && !order.layout_url && <p className="text-base text-slate-500 italic">Belum ada file</p>}
                                         {!layoutFilesLoading && layoutFiles.length === 0 && order.layout_url && (
                                             <div className="flex flex-wrap items-center gap-[8px] rounded-md border border-slate-200 bg-slate-50 px-[12px] py-[10px]">
                                                 <p className="flex-1 text-base text-slate-600">File Layout Lama (Google Drive)</p>
@@ -1947,7 +1957,7 @@ export default function OrderDetailModal({
                                     </div>
 
                                     <p className="mb-[12px] text-base text-slate-500">
-                                        Gambar ini ditampilkan ke customer di portal untuk disetujui. Upload gambar pratinjau layout (JPG/PNG).
+                                        Tampil di portal untuk ACC customer · JPG atau PNG
                                     </p>
 
                                     {order.layout_preview_url && (
@@ -2006,7 +2016,7 @@ export default function OrderDetailModal({
                                     <div className="min-w-0">
                                         <p className="text-base font-semibold text-emerald-700">Layout disetujui customer</p>
                                         <p className="text-base text-slate-600">
-                                            Disetujui via portal pada {formatDate(order.layout_approved_at)}
+                                            Via portal · {formatDateCompact(order.layout_approved_at)}
                                         </p>
                                     </div>
                                 </div>
@@ -2135,13 +2145,11 @@ export default function OrderDetailModal({
                                         <p className="text-base font-semibold text-slate-900">
                                             {layoutApprovedByCustomer ? 'Tahap selesai' : 'Tandai tahap selesai'}
                                         </p>
-                                        <p className="mt-[2px] text-base text-slate-500">
-                                            {layoutApprovedByCustomer
-                                                ? 'Otomatis dari ACC layout customer'
-                                                : isManualStageComplete()
-                                                    ? 'Sudah ditandai selesai'
-                                                    : 'Aktifkan bila tahap ini sudah dikerjakan'}
-                                        </p>
+                                        {(layoutApprovedByCustomer || isManualStageComplete()) && (
+                                            <p className="mt-[2px] text-base text-slate-500">
+                                                {layoutApprovedByCustomer ? 'Otomatis dari ACC layout customer' : 'Sudah ditandai selesai'}
+                                            </p>
+                                        )}
                                     </div>
                                     <button
                                         type="button"
