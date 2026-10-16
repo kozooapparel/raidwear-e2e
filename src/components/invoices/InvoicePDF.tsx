@@ -4,6 +4,7 @@ import { Document, Page, Text, View, Image, StyleSheet } from '@react-pdf/render
 import { InvoiceWithItems } from '@/types/database'
 import { formatCurrency, formatDate } from '@/lib/utils/format'
 import { terbilang } from '@/lib/utils/terbilang'
+import { pickItemDensity } from './invoicePdfLayout'
 
 const styles = StyleSheet.create({
     page: { padding: 40, fontSize: 10, fontFamily: 'Helvetica' },
@@ -145,6 +146,21 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
             : styles.terbilang
     const grandTotalColor = isBold ? accentColor : primaryColor
 
+    // Kepadatan baris item menyesuaikan panjang daftar item supaya seluruh isi
+    // (header, item, total, terbilang, rekening) tetap muat dalam satu halaman A4.
+    // Perhitungannya ada di `invoicePdfLayout.ts`; invoice dengan sedikit item
+    // tetap memakai kepadatan asli (padding 8 / fontSize 10), tidak berubah.
+    const itemDensity = pickItemDensity({
+        items: invoice.items ?? [],
+        templateId: template,
+        hasBankInfo: Boolean(bankInfo),
+        hasPembayaran: invoice.total_dibayar > 0,
+        hasPpn: invoice.ppn_persen > 0,
+        hasNoPo: Boolean(invoice.no_po),
+        customerAddress: invoice.customer?.alamat,
+    })
+    const tableRowStyle = { ...styles.tableRow, padding: itemDensity.padding, fontSize: itemDensity.fontSize }
+
     return (
         <Document>
             <Page size="A4" style={styles.page}>
@@ -194,7 +210,8 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
                         <Text style={[styles.colSubtotal, { color: 'white' }]}>Sub Total</Text>
                     </View>
                     {invoice.items?.map((item, index) => (
-                        <View key={index} style={styles.tableRow}>
+                        // wrap={false}: satu baris item tidak boleh terbelah dua halaman.
+                        <View key={index} style={tableRowStyle} wrap={false}>
                             <Text style={styles.colNo}>{index + 1}</Text>
                             <Text style={styles.colDesc}>{item.deskripsi}</Text>
                             <Text style={styles.colQty}>{item.jumlah}</Text>
@@ -205,6 +222,13 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
                     ))}
                 </View>
 
+                {/* Blok ujung dokumen dikelompokkan supaya tidak pernah terpisah dari
+                    tabelnya (total + terbilang + rekening ikut pindah bersama-sama).
+                    Dua teks footer di bawah sengaja TIDAK dimasukkan ke grup ini:
+                    keduanya `position: absolute` terhadap halaman, sehingga kalau
+                    dipindah ke dalam View, posisinya relatif ke View itu dan
+                    footer dokumen berpindah ke tengah halaman. */}
+                <View wrap={false}>
                 <View style={styles.totalsBox}>
                     <View style={styles.totalRow}>
                         <Text style={styles.totalLabel}>Sub Total</Text>
@@ -248,6 +272,7 @@ export function InvoicePDFDocument({ invoice, companyInfo, bankInfo, brandInfo }
                         <Text>No. Rekening: {bankInfo.account_number}</Text>
                     </View>
                 )}
+                </View>
 
                 {(companyInfo?.address || companyInfo?.phone) && (
                     <Text style={styles.footerCompanyInfo}>
