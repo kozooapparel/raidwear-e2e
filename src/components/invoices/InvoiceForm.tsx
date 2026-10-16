@@ -8,6 +8,8 @@ import { getBarangList, getHargaByQty } from '@/lib/actions/barang'
 import { getBankInfo, getCompanyInfo, BankInfo, CompanyInfo } from '@/lib/actions/settings'
 import { formatCurrency, formatDateInput } from '@/lib/utils/format'
 import { terbilang } from '@/lib/utils/terbilang'
+import { copyTextToClipboard } from '@/lib/utils/clipboard'
+import { Check, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import BrandSelector from './BrandSelector'
 import ItemPicker from './ItemPicker'
@@ -150,6 +152,97 @@ export default function InvoiceForm({
     const subTotal = items.reduce((sum, item) => sum + item.sub_total, 0)
     const ppnAmount = (subTotal * parseFloat(ppnPersen || '0')) / 100
     const total = subTotal + ppnAmount
+
+    // ---------------------------------------------------------------------
+    // Pesan tagihan untuk customer (disalin lewat tombol di kartu Pembayaran).
+    // Pesannya dipilih otomatis dari keadaan invoice: DP 50% atau pelunasan.
+    // ---------------------------------------------------------------------
+    const [billingMessageCopied, setBillingMessageCopied] = useState(false)
+
+    // Nama customer untuk sapaan: utamakan daftar customer halaman ini,
+    // lalu relasi customer pada invoice sebagai cadangan.
+    const billingCustomerName = useMemo(() => {
+        if (!invoice) return ''
+        return allCustomers.find(c => c.id === invoice.customer_id)?.name || invoice.customer?.name || ''
+    }, [allCustomers, invoice])
+
+    // Nama brand milik invoice (setiap brand punya rekening & nama sendiri).
+    const billingBrandName = invoice?.brand?.company_name || brandInfo?.name || ''
+
+    // Tahap penagihan dihitung dari angka yang SUDAH dibawa halaman invoice:
+    // `invoice.total_dibayar` (jumlah yang sudah dibayar) dan `invoice.sisa_tagihan`.
+    //
+    // Patokannya ambang DP 50%, BUKAN "total_dibayar > 0": customer yang baru
+    // membayar Deposit Desain (mis. Rp 35.000 dari total jutaan) sudah punya
+    // total_dibayar > 0 padahal DP produksi belum dibayar, jadi dia tetap harus
+    // menerima pesan DP 50%. Rumus DP 50% mengikuti kalkulator yang sudah ada di
+    // OrderDetailModal: Math.round(total * 0.5).
+    const billingStage = useMemo<'dp50' | 'pelunasan' | null>(() => {
+        // Tombol hanya untuk invoice tersimpan: butuh nomor invoice, nama customer,
+        // nama brand, total, dan rekening brand (bankInfo). Tanpa itu tombol
+        // disembunyikan supaya pesan tidak pernah berisi data kosong/karangan.
+        if (!isEdit || !invoice || !bankInfo) return null
+        if (!invoice.no_invoice || !billingCustomerName || !billingBrandName) return null
+        if (invoice.total <= 0) return null
+
+        // Sudah lunas: tidak ada yang perlu ditagih, tombolnya tidak muncul.
+        if (invoice.sisa_tagihan <= 0) return null
+
+        return invoice.total_dibayar >= Math.round(invoice.total * 0.5) ? 'pelunasan' : 'dp50'
+    }, [bankInfo, billingBrandName, billingCustomerName, invoice, isEdit])
+
+    // Nominal yang ditagih: DP 50% saat belum lewat DP, dan SISA TAGIHAN
+    // (bukan setengah dari total) saat pelunasan.
+    const billingAmount = billingStage === 'pelunasan'
+        ? (invoice?.sisa_tagihan ?? 0)
+        : Math.round((invoice?.total ?? 0) * 0.5)
+
+    const billingMessage = useMemo(() => {
+        if (!billingStage || !invoice || !bankInfo) return ''
+
+        const rekeningBrand = `Transfer ke:
+Bank ${bankInfo.bank_name}
+A/N ${bankInfo.account_name}
+No. Rek ${bankInfo.account_number}`
+
+        if (billingStage === 'pelunasan') {
+            return `Halo Kak ${billingCustomerName} 👋
+
+Pesanan ${billingBrandName} dengan No. Invoice ${invoice.no_invoice} tinggal menyelesaikan sisa pembayaran.
+
+Mohon pelunasan sebesar:
+*${formatCurrency(billingAmount)}* (${terbilang(billingAmount)})
+
+${rekeningBrand}
+
+Setelah transfer, mohon kirim bukti pembayarannya ke chat ini ya. Terima kasih 🙏`
+        }
+
+        return `Halo Kak ${billingCustomerName} 👋
+
+Pesanan ${billingBrandName} dengan No. Invoice ${invoice.no_invoice} sudah kami terima.
+
+Untuk lanjut ke proses produksi, mohon pembayaran DP 50% sebesar:
+*${formatCurrency(billingAmount)}* (${terbilang(billingAmount)})
+
+${rekeningBrand}
+
+Setelah transfer, mohon kirim bukti pembayarannya ke chat ini ya. Terima kasih 🙏`
+    }, [bankInfo, billingAmount, billingBrandName, billingCustomerName, billingStage, invoice])
+
+    // Label tombol ikut menyesuaikan supaya jelas pesan mana yang akan tersalin.
+    const billingButtonLabel = billingStage === 'pelunasan' ? 'Salin pesan pelunasan' : 'Salin pesan DP 50%'
+
+    const handleCopyBillingMessage = async () => {
+        const copied = await copyTextToClipboard(billingMessage)
+        if (!copied) {
+            toast.error('Gagal menyalin pesan tagihan')
+            return
+        }
+        setBillingMessageCopied(true)
+        setTimeout(() => setBillingMessageCopied(false), 2000)
+        toast.success('Pesan tagihan disalin')
+    }
 
     // Customer baru dibuat: daftarkan ke picker lalu pilih otomatis
     const handleCustomerSaved = (customer: Customer) => {
@@ -670,16 +763,29 @@ export default function InvoiceForm({
                 {/* Bank Info */}
                 {bankInfo && (
                     <div className="p-6 border-t border-slate-200 bg-white rounded-b-xl">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Pembayaran</h4>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Pembayaran</h4>
+                            {billingMessage && (
+                                <button
+                                    type="button"
+                                    onClick={handleCopyBillingMessage}
+                                    className="btn-secondary shrink-0 min-h-[44px] md:min-h-[37px]"
+                                    aria-label={billingButtonLabel}
+                                >
+                                    {billingMessageCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                                    {billingMessageCopied ? 'Tersalin' : billingButtonLabel}
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
                                 <div className="space-y-1 text-sm">
                                     <p className="text-slate-600">Bank: <span className="font-semibold text-brand-600">{bankInfo.bank_name}</span></p>
                                     <p className="text-slate-600">A/N: <span className="font-medium text-slate-800">{bankInfo.account_name}</span></p>
                                     <p className="text-slate-600">No. Rek: <span className="font-mono font-medium text-slate-800">{bankInfo.account_number}</span></p>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg">
+                            <div className="flex shrink-0 items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg">
                                 <span className="text-sm text-slate-500">Termin:</span>
                                 <NumberInput
                                     value={terminPembayaran}
