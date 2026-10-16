@@ -1672,15 +1672,6 @@ export default function OrderDetailModal({
                                         {stageReadiness?.label}
                                     </span>
                                 </div>
-                                {nextStage && (
-                                    <div className="mt-[12px] flex items-center gap-[8px] border-t border-slate-200 pt-[12px] text-base">
-                                        <span className="shrink-0 text-slate-500">Berikutnya</span>
-                                        <svg className="w-4 h-4 shrink-0 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                                        </svg>
-                                        <span className="truncate font-semibold text-slate-900">{STAGE_LABELS[nextStage]}</span>
-                                    </div>
-                                )}
                             </div>
 
                             {/* Invoice & DP Status Checklist for dp_produksi stage */}
