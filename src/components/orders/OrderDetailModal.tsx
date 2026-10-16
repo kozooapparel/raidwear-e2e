@@ -925,10 +925,10 @@ export default function OrderDetailModal({
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-            {/* Modal — satu tingkat elevasi: bayangan saja (tanpa tepi), radius 12 */}
+            {/* Modal — ukuran tetap seperti semula (max-w-2xl / max-h-[90vh]); gulir diringankan dari isi tab */}
             <div className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden bg-white rounded-lg shadow-2xl m-4 flex flex-col">
                 {/* Header */}
-                <div className="px-[24px] py-[16px] border-b border-slate-200 flex flex-wrap items-center justify-between gap-[12px]">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-[12px] border-b border-slate-200 px-[12px] py-[10px] sm:px-[16px] sm:py-[12px]">
                     {/* Identitas: nama/telepon + chip stage (chip tetap satu baris) */}
                     <div className="flex min-w-0 flex-wrap items-center gap-[12px]">
                         <div className="min-w-0">
@@ -987,7 +987,7 @@ export default function OrderDetailModal({
                 </div>
 
                 {/* Tabs - Conditional based on stage */}
-                <div className="flex border-b border-slate-200">
+                <div className="flex shrink-0 border-b border-slate-200">
                     {/* Detail tab - always show */}
                     <button
                         onClick={() => setActiveTab('detail')}
@@ -1021,7 +1021,7 @@ export default function OrderDetailModal({
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-[24px]">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-[12px] sm:p-[16px]">
                     {/* Detail Tab */}
                     {activeTab === 'detail' && (
                         <div className="space-y-[16px]">

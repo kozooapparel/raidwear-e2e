@@ -189,13 +189,13 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
     }
 
     const fieldInput = 'input w-full min-h-[44px] md:min-h-[38px]'
-    const fieldLabel = 'block text-sm font-semibold text-slate-700 mb-[6px]'
+    const fieldLabel = 'block text-sm font-semibold text-slate-700 mb-[4px]'
 
     return (
-        <div className="space-y-[16px]">
+        <div className="space-y-[12px]">
             {/* Header: Logo brand + FORM ORDER PRODUKSI (otomatis) */}
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <div className="flex items-center gap-[12px] border-b border-slate-200 p-[16px]">
+                <div className="flex items-center gap-[12px] border-b border-slate-200 p-[12px]">
                     {order.brand?.logo_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -219,15 +219,15 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
 
                 {/* Data customer (otomatis) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200">
-                    <div className="p-[16px]">
+                    <div className="p-[12px]">
                         <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Customer</p>
                         <p className="mt-[4px] text-base font-semibold text-slate-800">{order.customer?.name || '-'}</p>
                     </div>
-                    <div className="p-[16px]">
+                    <div className="p-[12px]">
                         <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Tanggal Order</p>
                         <p className="mt-[4px] text-base font-semibold text-slate-800">{formatTanggal(order.created_at)}</p>
                     </div>
-                    <div className="p-[16px]">
+                    <div className="p-[12px]">
                         <p className="text-sm font-medium uppercase tracking-wide text-slate-500">Deadline Produksi</p>
                         <p className="mt-[4px] text-base font-semibold text-slate-900">
                             {formatTanggal(getDeadlineProduksi(order.created_at))}
@@ -240,15 +240,15 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
             </div>
 
             {/* Layout 2 kolom: kanan atas = list order, kiri atas = form */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-[16px]">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-[12px]">
                 {/* Kiri: kolom form (detail produk + kebutuhan produksi) */}
-                <div className="lg:col-span-2 space-y-[16px]">
+                <div className="lg:col-span-2 space-y-[12px]">
                     {/* Detail Produk */}
                     <div className="rounded-lg border border-slate-200 overflow-hidden">
-                        <div className="border-b border-slate-200 px-[16px] py-[12px]">
+                        <div className="border-b border-slate-200 px-[12px] py-[8px]">
                             <h3 className="text-lg font-semibold text-slate-900">Detail Produk</h3>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px] p-[16px]">
+                        <div className="grid grid-cols-2 gap-[10px] p-[12px]">
                             <div>
                                 <label className={fieldLabel}>Jenis Produk</label>
                                 <input
@@ -314,10 +314,10 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
 
                     {/* Kebutuhan Produksi */}
                     <div className="rounded-lg border border-slate-200 overflow-hidden">
-                        <div className="border-b border-slate-200 px-[16px] py-[12px]">
+                        <div className="border-b border-slate-200 px-[12px] py-[8px]">
                             <h3 className="text-lg font-semibold text-slate-900">Kebutuhan Produksi</h3>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px] p-[16px]">
+                        <div className="grid grid-cols-2 gap-[10px] p-[12px]">
                             <div>
                                 <label className={fieldLabel}>Kebutuhan Bahan (meter)</label>
                                 <NumberInput
@@ -344,7 +344,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     </div>
 
                     {/* Kerah (kiri bawah) + Mockup (kanan bawah) */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
+                    <div className="grid grid-cols-2 gap-[10px]">
                         <ImageSlot
                             title="Kerah"
                             url={collarImages[0]}
@@ -376,7 +376,7 @@ export default function FormOrderEditor({ order, onSave, isLoading = false }: Fo
                     className={`rounded-lg border overflow-hidden h-fit bg-white transition-colors ${pasteTarget === 'list' ? 'border-brand-400 ring-1 ring-brand-200' : 'border-slate-200'
                         }`}
                 >
-                    <div className="border-b border-slate-200 px-[16px] py-[12px]">
+                    <div className="border-b border-slate-200 px-[12px] py-[8px]">
                         <h3 className="text-lg font-semibold text-slate-900">List Order</h3>
                     </div>
                     <div className="space-y-[12px] p-[12px]">
