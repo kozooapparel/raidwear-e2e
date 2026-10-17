@@ -3,13 +3,24 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
-import { Modal, ModalFooter, FormField } from '@/components/ui'
+import { Modal, ModalFooter, FormField, CountryCodePicker } from '@/components/ui'
+import {
+    DEFAULT_COUNTRY_CODE,
+    DEFAULT_COUNTRY_ISO,
+    getDialByIso,
+    getIsoByDial,
+} from '@/lib/data/country-codes'
+import { normalizePhone, formatPhoneInput } from '@/lib/utils/phone'
 
 interface CustomerWithStats {
     id: string
     name: string
-    phone: string
+    phone: string | null
+    country_code: string | null
     alamat?: string | null
+    status: 'pending' | 'active'
+    phone_normalized: string | null
+    portal_token: string | null
     created_at: string
     order_count: number
     total_quantity: number
@@ -27,6 +38,7 @@ export default function EditCustomerModal({ customer, isOpen, onClose, onCustome
     const [loading, setLoading] = useState(false)
     const [name, setName] = useState('')
     const [phone, setPhone] = useState('')
+    const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
     const [alamat, setAlamat] = useState('')
 
     const supabase = createClient()
@@ -35,7 +47,14 @@ export default function EditCustomerModal({ customer, isOpen, onClose, onCustome
     useEffect(() => {
         if (customer) {
             setName(customer.name || '')
-            setPhone(customer.phone || '')
+            // Tampilkan nomor nasional saja (tanpa awalan + / kode negara).
+            const cc = (customer.country_code || DEFAULT_COUNTRY_CODE).replace(/\D/g, '') || DEFAULT_COUNTRY_CODE
+            setPhone(
+                customer.phone_normalized?.startsWith(cc)
+                    ? customer.phone_normalized.slice(cc.length)
+                    : (customer.phone || ''),
+            )
+            setCountryIso(getIsoByDial(customer.country_code || DEFAULT_COUNTRY_ISO))
             setAlamat(customer.alamat || '')
         }
     }, [customer])
@@ -44,32 +63,38 @@ export default function EditCustomerModal({ customer, isOpen, onClose, onCustome
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!name.trim() || !phone.trim()) {
-            toast.warning('Nama dan No. HP wajib diisi')
+        if (!name.trim()) {
+            toast.warning('Nama wajib diisi')
             return
         }
 
         setLoading(true)
         try {
-            // Check if phone already exists (exclude current customer)
-            const { data: existing } = await supabase
-                .from('customers')
-                .select('id, name')
-                .eq('phone', phone.trim())
-                .neq('id', customer.id)
-                .single()
+            const phoneTrim = phone.trim()
+            const normalized = normalizePhone(phoneTrim, getDialByIso(countryIso))
 
-            if (existing) {
-                toast.warning(`No. HP ini sudah digunakan customer lain: ${existing.name}`)
-                setLoading(false)
-                return
+            // Check if phone already exists (exclude current customer)
+            if (normalized) {
+                const { data: existing } = await supabase
+                    .from('customers')
+                    .select('id, name')
+                    .eq('phone_normalized', normalized)
+                    .neq('id', customer.id)
+                    .maybeSingle()
+
+                if (existing) {
+                    toast.warning(`No. HP ini sudah digunakan customer lain: ${existing.name}`)
+                    setLoading(false)
+                    return
+                }
             }
 
             const { data: updated, error } = await supabase
                 .from('customers')
                 .update({
                     name: name.trim(),
-                    phone: phone.trim(),
+                    phone: phoneTrim || null,
+                    country_code: getDialByIso(countryIso),
                     alamat: alamat.trim() || null,
                     updated_at: new Date().toISOString(),
                 })
@@ -87,7 +112,11 @@ export default function EditCustomerModal({ customer, isOpen, onClose, onCustome
                 ...customer,
                 name: updated.name,
                 phone: updated.phone,
+                country_code: updated.country_code ?? null,
                 alamat: updated.alamat,
+                status: updated.status ?? 'active',
+                phone_normalized: updated.phone_normalized ?? null,
+                portal_token: updated.portal_token ?? null,
             })
             onClose()
             toast.success('Data customer berhasil diperbarui!')
@@ -119,18 +148,25 @@ export default function EditCustomerModal({ customer, isOpen, onClose, onCustome
                 <FormField
                     label="No. HP"
                     htmlFor="edit-customer-phone"
-                    required
-                    hint="Gunakan format tanpa spasi atau tanda hubung"
+                    aside={<span className="text-xs text-slate-400">Opsional</span>}
                 >
-                    <input
-                        id="edit-customer-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="081234567890"
-                        className="input"
-                        required
-                    />
+                    <div className="flex gap-2">
+                        <div className="w-32 shrink-0">
+                            <CountryCodePicker
+                                value={countryIso}
+                                onChange={setCountryIso}
+                                ariaLabel="Pilih kode negara"
+                            />
+                        </div>
+                        <input
+                            id="edit-customer-phone"
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(formatPhoneInput(e.target.value, getDialByIso(countryIso)))}
+                            placeholder="81234567890"
+                            className="input flex-1"
+                        />
+                    </div>
                 </FormField>
 
                 {/* Alamat */}

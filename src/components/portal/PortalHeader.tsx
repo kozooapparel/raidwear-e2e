@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { MessageCircle, Mail } from 'lucide-react'
 import type { PortalBrand } from '@/lib/portal/types'
+import { formatWaLink } from '@/lib/utils/phone'
 
 interface PortalHeaderProps {
     brand: PortalBrand
@@ -13,9 +14,10 @@ interface PortalHeaderProps {
  * Menampilkan identitas brand + kanal bantuan (WhatsApp & email).
  */
 export function PortalHeader({ brand }: PortalHeaderProps) {
-    const waLink = brand.phone
-        ? `https://wa.me/${brand.phone}?text=${encodeURIComponent('Halo, saya ingin bertanya tentang order saya.')}`
-        : null
+    const waLink = formatWaLink(
+        brand.phoneNormalized ?? brand.phone,
+        'Halo, saya ingin bertanya tentang order saya.',
+    )
 
     return (
         <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">

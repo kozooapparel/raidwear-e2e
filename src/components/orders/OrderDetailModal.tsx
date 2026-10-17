@@ -13,6 +13,7 @@ import { copyTextToClipboard } from '@/lib/utils/clipboard'
 import { ImageDropzone, CurrencyInput, ConfirmDialog, validateImageFile } from '@/components/ui'
 import InvoicePreviewButton from '@/components/invoices/InvoicePreviewButton'
 import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder } from '@/lib/actions/orders'
+import { getCustomerPortalLink } from '@/lib/actions/customers'
 
 type OrderDetailTab = 'detail' | 'payment' | 'stage' | 'form-order'
 
@@ -913,21 +914,27 @@ export default function OrderDetailModal({
     const nextStage = getNextStage()
     const previousStage = getPreviousStage()
 
-    // Salin link portal customer agar bisa dikirim ke pelanggan.
+    // Salin link dashboard customer (berisi seluruh order customer) agar bisa
+    // dikirim ke pelanggan sebagai satu gerbang berbagi link.
     const handleCopyPortalLink = async () => {
-        if (!order?.portal_token) {
-            toast.error('Order ini belum memiliki token portal')
+        if (!order?.customer?.id) {
+            toast.error('Data customer tidak ditemukan')
             return
         }
-        const link = `${window.location.origin}/lacak/${order.portal_token}`
+        const result = await getCustomerPortalLink(order.customer.id)
+        if (!result.success || !result.url) {
+            toast.error(result.message || 'Gagal membuat link dashboard')
+            return
+        }
+        const link = `${window.location.origin}${result.url}`
         const copied = await copyTextToClipboard(link)
         if (!copied) {
-            toast.error('Gagal menyalin link portal')
+            toast.error('Gagal menyalin link dashboard')
             return
         }
         setPortalLinkCopied(true)
         setTimeout(() => setPortalLinkCopied(false), 2000)
-        toast.success('Link portal disalin')
+        toast.success('Link dashboard customer disalin')
     }
 
     return (
@@ -954,8 +961,8 @@ export default function OrderDetailModal({
                         <button
                             onClick={handleCopyPortalLink}
                             className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[36px] md:w-[36px]"
-                            title="Salin Link Portal"
-                            aria-label="Salin link portal customer"
+                            title="Salin Link Dashboard"
+                            aria-label="Salin link dashboard customer"
                         >
                             {portalLinkCopied ? (
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

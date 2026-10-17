@@ -5,11 +5,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { STAGE_LABELS } from '@/types/database'
+import { formatWaLink } from '@/lib/utils/phone'
 
 interface CustomerWithStats {
     id: string
     name: string
-    phone: string
+    phone: string | null
+    phone_normalized: string | null
     created_at: string
     order_count: number
     total_quantity: number
@@ -112,6 +114,8 @@ export default function CustomerDetailModal({ customer, isOpen, onClose }: Custo
     if (!isOpen || !customer) return null
 
     const tier = getCustomerTier(customer.order_count)
+    const displayPhone = customer.phone_normalized ? `+${customer.phone_normalized}` : (customer.phone || '-')
+    const waHref = formatWaLink(customer.phone_normalized ?? customer.phone)
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -142,13 +146,13 @@ export default function CustomerDetailModal({ customer, isOpen, onClose }: Custo
                                     <span className={`badge ${tier.badge}`}>{tier.label}</span>
                                 </div>
                                 <a
-                                    href={`tel:${customer.phone}`}
+                                    href={customer.phone ? `tel:${customer.phone}` : undefined}
                                     className="mt-0.5 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-brand-600 transition-colors"
                                 >
                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
                                     </svg>
-                                    {customer.phone}
+                                    {displayPhone}
                                 </a>
                                 <p className="text-xs text-slate-400 mt-0.5">
                                     Customer sejak {formatDate(customer.created_at)}
@@ -252,7 +256,7 @@ export default function CustomerDetailModal({ customer, isOpen, onClose }: Custo
                 {/* Footer Actions */}
                 <div className="p-4 border-t border-slate-200 bg-white flex gap-2">
                     <a
-                        href={`https://wa.me/${customer.phone.replace(/^0/, '62')}`}
+                        href={waHref ?? '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn flex-1 bg-emerald-500 text-white hover:bg-emerald-600"

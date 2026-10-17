@@ -13,27 +13,37 @@ export type Database = {
                 Row: {
                     id: string
                     name: string
-                    phone: string
+                    phone: string | null
+                    country_code: string
+                    phone_normalized: string | null
                     alamat: string | null
                     kota: string | null
+                    status: 'pending' | 'active'
+                    portal_token: string | null
                     created_at: string
                     updated_at: string
                 }
                 Insert: {
                     id?: string
                     name: string
-                    phone: string
+                    phone?: string | null
+                    country_code?: string
                     alamat?: string | null
                     kota?: string | null
+                    status?: 'pending' | 'active'
+                    portal_token?: string | null
                     created_at?: string
                     updated_at?: string
                 }
                 Update: {
                     id?: string
                     name?: string
-                    phone?: string
+                    phone?: string | null
+                    country_code?: string
                     alamat?: string | null
                     kota?: string | null
+                    status?: 'pending' | 'active'
+                    portal_token?: string | null
                     created_at?: string
                     updated_at?: string
                 }
@@ -49,6 +59,7 @@ export type Database = {
                     company_name: string
                     address: string | null
                     phone: string | null
+                    phone_normalized: string | null
                     email: string | null
                     logo_url: string | null
                     bank_name: string | null
@@ -78,6 +89,7 @@ export type Database = {
                     company_name: string
                     address?: string | null
                     phone?: string | null
+                    phone_normalized?: string | null
                     email?: string | null
                     logo_url?: string | null
                     bank_name?: string | null
@@ -107,6 +119,7 @@ export type Database = {
                     company_name?: string
                     address?: string | null
                     phone?: string | null
+                    phone_normalized?: string | null
                     email?: string | null
                     logo_url?: string | null
                     bank_name?: string | null

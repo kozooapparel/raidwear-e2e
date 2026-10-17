@@ -4,6 +4,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout'
 import Link from 'next/link'
 import Image from 'next/image'
 import { STAGE_LABELS } from '@/types/database'
+import { formatWaLink } from '@/lib/utils/phone'
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -108,8 +109,8 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                                     </span>
                                 </div>
                                 <p className="text-slate-600 mt-1">
-                                    <a href={`tel:${customer.phone}`} className="hover:text-red-500 transition-colors">
-                                        📱 {customer.phone}
+                                    <a href={customer.phone ? `tel:${customer.phone}` : undefined} className="hover:text-red-500 transition-colors">
+                                        📱 {customer.phone_normalized ? `+${customer.phone_normalized}` : (customer.phone || '-')}
                                     </a>
                                 </p>
                                 <p className="text-xs text-slate-400 mt-1">
@@ -119,7 +120,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                         </div>
                         {/* WhatsApp Button */}
                         <a
-                            href={`https://wa.me/${customer.phone.replace(/^0/, '62')}`}
+                            href={formatWaLink(customer.phone_normalized ?? customer.phone) ?? '#'}
                             target="_blank"
                             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors"
                         >

@@ -14,6 +14,7 @@ export interface PortalBrand {
     companyName: string
     logoUrl: string | null
     phone: string | null
+    phoneNormalized: string | null
     email: string | null
     address: string | null
     bankName: string | null

@@ -6,6 +6,7 @@ import { createBrand, updateBrand } from '@/lib/actions/brands'
 import { createClient } from '@/lib/supabase/client'
 import { resizeImageToSquare } from '@/lib/utils/image'
 import { toast } from 'sonner'
+import { formatPhoneInput } from '@/lib/utils/phone'
 import { Modal, ModalFooter, FormField, SelectBox } from '@/components/ui'
 import type { SelectOption } from '@/components/ui'
 
@@ -63,7 +64,8 @@ function BrandForm({ onClose, brand, onBrandCreated, onBrandUpdated }: BrandForm
         name: brand?.name || '',
         company_name: brand?.company_name || '',
         address: brand?.address || '',
-        phone: brand?.phone || '',
+        // Tampilkan nomor nasional saja (tanpa awalan +62; brand selalu Indonesia).
+        phone: brand?.phone_normalized?.startsWith('62') ? brand.phone_normalized.slice(2) : (brand?.phone || ''),
         email: brand?.email || '',
         logo_url: brand?.logo_url || '',
         bank_name: brand?.bank_name || '',
@@ -80,7 +82,9 @@ function BrandForm({ onClose, brand, onBrandCreated, onBrandUpdated }: BrandForm
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target
-        setFormData(prev => ({ ...prev, [name]: value }))
+        // Telepon brand selalu dinormalisasi ke format internasional (62) saat diketik.
+        const next = name === 'phone' ? formatPhoneInput(value, '62') : value
+        setFormData(prev => ({ ...prev, [name]: next }))
     }
 
     // Upload logo: resize ke 180x180 (ringan), lalu simpan ke Supabase Storage

@@ -6,7 +6,11 @@ import CustomerList from '@/components/customers/CustomerList'
 interface CustomerWithStats {
     id: string
     name: string
-    phone: string
+    phone: string | null
+    country_code: string | null
+    status: 'pending' | 'active'
+    phone_normalized: string | null
+    portal_token: string | null
     created_at: string
     order_count: number
     total_quantity: number

@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { OrderStage } from '@/types/database'
 import type { PortalOrder } from './types'
 
-interface PortalOrderRpc {
+export interface PortalOrderRpc {
     token: string
     orderNumber: string
     orderDescription: string
@@ -39,6 +39,7 @@ interface PortalOrderRpc {
         companyName: string | null
         logoUrl: string | null
         phone: string | null
+        phone_normalized: string | null
         email: string | null
         address: string | null
         bankName: string | null
@@ -83,7 +84,7 @@ interface PortalOrderRpc {
 }
 
 /** Ubah hasil RPC menjadi PortalOrder dengan nilai default yang aman. */
-function mapPortalOrder(raw: PortalOrderRpc): PortalOrder {
+export function mapPortalOrder(raw: PortalOrderRpc): PortalOrder {
     const invoice = raw.payment?.invoice ?? null
 
     return {
@@ -115,6 +116,7 @@ function mapPortalOrder(raw: PortalOrderRpc): PortalOrder {
             companyName: raw.brand?.companyName ?? '',
             logoUrl: raw.brand?.logoUrl ?? null,
             phone: raw.brand?.phone ?? null,
+            phoneNormalized: raw.brand?.phone_normalized ?? null,
             email: raw.brand?.email ?? null,
             address: raw.brand?.address ?? null,
             bankName: raw.brand?.bankName ?? null,

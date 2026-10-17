@@ -6,7 +6,9 @@ import { toast } from 'sonner'
 import AddCustomerModal from './AddCustomerModal'
 import CustomerDetailModal from './CustomerDetailModal'
 import EditCustomerModal from './EditCustomerModal'
-import { deleteCustomer } from '@/lib/actions/customers'
+import { deleteCustomer, getCustomerPortalLink, approveCustomer } from '@/lib/actions/customers'
+import { copyTextToClipboard } from '@/lib/utils/clipboard'
+import { formatWaLink } from '@/lib/utils/phone'
 import { PageHeader, EmptyState, DefaultEmptyIcon, StatCard } from '@/components/ui/ds'
 import { SearchBar, SelectBox, ConfirmDialog, FilterPills } from '@/components/ui'
 import type { SelectOption, FilterPillOption } from '@/components/ui'
@@ -14,7 +16,11 @@ import type { SelectOption, FilterPillOption } from '@/components/ui'
 interface CustomerWithStats {
     id: string
     name: string
-    phone: string
+    phone: string | null
+    country_code: string | null
+    status: 'pending' | 'active'
+    phone_normalized: string | null
+    portal_token: string | null
     created_at: string
     order_count: number
     total_quantity: number
@@ -71,6 +77,11 @@ const Icon = {
     X: (p: { className?: string }) => (
         <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+    ),
+    Link: (p: { className?: string }) => (
+        <svg className={p.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
         </svg>
     ),
 }
@@ -134,6 +145,10 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
     const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
     const [deleting, setDeleting] = useState(false)
     const [isMobile, setIsMobile] = useState(false)
+    const [approvingId, setApprovingId] = useState<string | null>(null)
+
+    // Filter status anti-spam
+    const [statusView, setStatusView] = useState<'all' | 'pending'>('all')
 
     // Toolbar daftar: pencarian, filter tier, pengurutan
     const [searchQuery, setSearchQuery] = useState('')
@@ -208,8 +223,44 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
         }
     }
 
+    // Setujui customer pending menjadi active
+    const handleApprove = async (customer: CustomerWithStats) => {
+        setApprovingId(customer.id)
+        try {
+            const result = await approveCustomer(customer.id)
+            if (!result.success) {
+                toast.error(result.message)
+                return
+            }
+            toast.success(result.message)
+            upsertCustomer({ ...customer, status: 'active' })
+        } catch (err) {
+            console.error('Approve error:', err)
+            toast.error('Gagal menyetujui customer')
+        } finally {
+            setApprovingId(null)
+        }
+    }
+
+    // Salin link portal customer ke clipboard
+    const handleCopyPortalLink = async (customer: CustomerWithStats) => {
+        const result = await getCustomerPortalLink(customer.id)
+        if (!result.success || !result.url) {
+            toast.error(result.message || 'Gagal membuat link portal')
+            return
+        }
+        const fullUrl = `${window.location.origin}${result.url}`
+        const ok = await copyTextToClipboard(fullUrl)
+        if (ok) {
+            toast.success('Link portal berhasil disalin')
+        } else {
+            toast.error('Gagal menyalin ke clipboard')
+        }
+    }
+
     const totalCustomers = customers.length
     const totalRevenue = customers.reduce((sum, c) => sum + c.total_revenue, 0)
+    const pendingCount = customers.filter((c) => c.status === 'pending').length
 
     // Jumlah per tier, dipakai oleh kartu statistik dan pill filter
     const tierCounts = useMemo(() => {
@@ -228,10 +279,12 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
         const q = searchQuery.trim().toLowerCase()
         const qDigits = q.replace(/\D/g, '')
         const list = customers.filter((c) => {
-            if (tierFilter !== 'all' && tierOf(c.order_count) !== tierFilter) return false
+            if (statusView === 'pending' && c.status !== 'pending') return false
+            if (statusView === 'all' && tierFilter !== 'all' && tierOf(c.order_count) !== tierFilter) return false
             if (!q) return true
             if (c.name.toLowerCase().includes(q)) return true
-            return qDigits.length > 0 && c.phone.replace(/\D/g, '').includes(qDigits)
+            const phoneDigits = (c.phone_normalized || c.phone || '').replace(/\D/g, '')
+            return qDigits.length > 0 && phoneDigits.includes(qDigits)
         })
         return [...list].sort((a, b) => {
             switch (sortBy) {
@@ -241,7 +294,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                 default: return a.name.localeCompare(b.name, 'id')
             }
         })
-    }, [customers, searchQuery, tierFilter, sortBy])
+    }, [customers, searchQuery, tierFilter, sortBy, statusView])
 
     const hasActiveFilter = searchQuery.trim().length > 0 || tierFilter !== 'all'
 
@@ -302,6 +355,33 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                 />
             </div>
 
+            {/* Filter status anti-spam */}
+            <div className="inline-flex rounded-lg bg-slate-100 p-1">
+                <button
+                    onClick={() => setStatusView('all')}
+                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        statusView === 'all'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                    Semua
+                </button>
+                <button
+                    onClick={() => setStatusView('pending')}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        statusView === 'pending'
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                    Menunggu Persetujuan
+                    {pendingCount > 0 && (
+                        <span className="badge badge-warning">{pendingCount}</span>
+                    )}
+                </button>
+            </div>
+
             {/* Toolbar: pencarian, filter tier, pengurutan */}
             {customers.length > 0 && (
                 <div className="surface space-y-3 p-3 md:p-4">
@@ -325,13 +405,15 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <FilterPills
-                            options={tierFilterOptions}
-                            value={tierFilter}
-                            onChange={setTierFilter}
-                            size="sm"
-                            ariaLabel="Filter tier customer"
-                        />
+                        {statusView !== 'pending' && (
+                            <FilterPills
+                                options={tierFilterOptions}
+                                value={tierFilter}
+                                onChange={setTierFilter}
+                                size="sm"
+                                ariaLabel="Filter tier customer"
+                            />
+                        )}
                         <span className="ml-auto text-xs text-slate-500">
                             Menampilkan <span className="font-semibold text-slate-700">{visibleCustomers.length}</span> dari {customers.length}
                         </span>
@@ -391,9 +473,14 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                         >
                                             {customer.name}
                                         </button>
-                                        <span className={`badge ${toneToBadge[tier.tone]} mt-1.5`}>
-                                            {tier.label}
-                                        </span>
+                                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                            <span className={`badge ${toneToBadge[tier.tone]}`}>
+                                                {tier.label}
+                                            </span>
+                                            {customer.status === 'pending' && (
+                                                <span className="badge badge-warning">Menunggu Persetujuan</span>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -401,7 +488,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                 <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
                                     <div className="flex items-center gap-2 text-slate-600">
                                         <Icon.Phone className="w-4 h-4 text-slate-400" />
-                                        {customer.phone}
+                                        {customer.phone_normalized ? `+${customer.phone_normalized}` : (customer.phone || '-')}
                                     </div>
                                     <div className="flex items-center gap-2 text-slate-600">
                                         <Icon.ShoppingBag className="w-4 h-4 text-slate-400" />
@@ -416,11 +503,29 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
 
                                 {/* Action Buttons */}
                                 <div className="flex gap-2 pt-3 border-t border-slate-100">
+                                    {customer.status === 'pending' && (
+                                        <button
+                                            onClick={() => handleApprove(customer)}
+                                            disabled={approvingId === customer.id}
+                                            className="flex-1 btn-primary disabled:opacity-60"
+                                        >
+                                            {approvingId === customer.id ? 'Memproses...' : 'Approve'}
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setSelectedCustomer(customer)}
                                         className="flex-1 btn-secondary"
                                     >
                                         Lihat Detail
+                                    </button>
+                                    <button
+                                        onClick={() => handleCopyPortalLink(customer)}
+                                        disabled={!customer.phone_normalized}
+                                        className="btn-icon btn-ghost text-brand-600 hover:bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        title={customer.phone_normalized ? 'Salin Link Portal' : 'Belum ada link portal'}
+                                        aria-label="Salin link portal customer"
+                                    >
+                                        <Icon.Link className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => setDeleteConfirmId(customer.id)}
@@ -431,7 +536,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                         <Icon.Trash className="w-4 h-4" />
                                     </button>
                                     <a
-                                        href={`https://wa.me/${customer.phone.replace(/^0/, '62')}`}
+                                        href={formatWaLink(customer.phone_normalized ?? customer.phone) ?? '#'}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="btn-icon bg-emerald-500 hover:bg-emerald-600 text-white"
@@ -479,19 +584,35 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                                     </span>
                                                 </button>
                                             </td>
-                                            <td className="px-4 py-3 text-slate-600 text-mono text-sm">{customer.phone}</td>
+                                            <td className="px-4 py-3 text-slate-600 text-mono text-sm">
+                                                {customer.phone_normalized ? `+${customer.phone_normalized}` : (customer.phone || '-')}
+                                            </td>
                                             <td className="px-4 py-3 text-center font-medium text-slate-900 text-mono">{customer.order_count}</td>
                                             <td className="px-4 py-3 text-center text-slate-600 text-mono">{customer.total_quantity} pcs</td>
                                             <td className="px-4 py-3 text-right font-medium text-emerald-600 text-mono">
                                                 {formatCurrency(customer.total_revenue)}
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className={`badge ${toneToBadge[tier.tone]}`}>
-                                                    {tier.label}
-                                                </span>
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className={`badge ${toneToBadge[tier.tone]}`}>
+                                                        {tier.label}
+                                                    </span>
+                                                    {customer.status === 'pending' && (
+                                                        <span className="badge badge-warning">Menunggu Persetujuan</span>
+                                                    )}
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
+                                                    {customer.status === 'pending' && (
+                                                        <button
+                                                            onClick={() => handleApprove(customer)}
+                                                            disabled={approvingId === customer.id}
+                                                            className="btn-secondary btn-sm disabled:opacity-60"
+                                                        >
+                                                            {approvingId === customer.id ? 'Memproses...' : 'Approve'}
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => setSelectedCustomer(customer)}
                                                         className="btn-icon btn-ghost"
@@ -509,6 +630,15 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                                         <Icon.Pencil className="w-4 h-4" />
                                                     </button>
                                                     <button
+                                                        onClick={() => handleCopyPortalLink(customer)}
+                                                        disabled={!customer.phone_normalized}
+                                                        className="btn-icon btn-ghost text-brand-600 hover:!bg-brand-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        title={customer.phone_normalized ? 'Salin Link Portal' : 'Belum ada link portal'}
+                                                        aria-label="Salin link portal customer"
+                                                    >
+                                                        <Icon.Link className="w-4 h-4" />
+                                                    </button>
+                                                    <button
                                                         onClick={() => setDeleteConfirmId(customer.id)}
                                                         className="btn-icon btn-ghost text-red-600 hover:!bg-red-50"
                                                         title="Hapus Customer"
@@ -517,7 +647,7 @@ export default function CustomerList({ customers: initialCustomers }: CustomerLi
                                                         <Icon.Trash className="w-4 h-4" />
                                                     </button>
                                                     <a
-                                                        href={`https://wa.me/${customer.phone.replace(/^0/, '62')}`}
+                                                        href={formatWaLink(customer.phone_normalized ?? customer.phone) ?? '#'}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="btn-icon bg-emerald-500 hover:bg-emerald-600 text-white"

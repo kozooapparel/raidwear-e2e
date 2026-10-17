@@ -40,6 +40,8 @@ export async function updateSession(request: NextRequest) {
         !request.nextUrl.pathname.startsWith('/login') &&
         !request.nextUrl.pathname.startsWith('/auth') &&
         !request.nextUrl.pathname.startsWith('/lacak') && // Portal customer (Phase One, akses via token)
+        !request.nextUrl.pathname.startsWith('/portal') && // Dashboard customer (kompatibilitas lama, redirect)
+        !request.nextUrl.pathname.startsWith('/pesanan') && // Dashboard customer publik + form daftar
         !request.nextUrl.pathname.startsWith('/api/iclock') && // Allow fingerprint machine ADMS protocol
         !request.nextUrl.pathname.startsWith('/api/bioclock') // Allow Bioclock Push SDK webhook
     ) {

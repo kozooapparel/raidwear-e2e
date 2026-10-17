@@ -3,6 +3,7 @@
 import { MapPin, MessageCircle, Mail, Truck } from 'lucide-react'
 import type { PortalOrder } from '@/lib/portal/types'
 import { formatDate } from '@/lib/utils/format'
+import { formatWaLink } from '@/lib/utils/phone'
 
 interface ShippingSupportProps {
     order: PortalOrder
@@ -13,11 +14,10 @@ interface ShippingSupportProps {
  */
 export function ShippingSupport({ order }: ShippingSupportProps) {
     const { shipping, brand } = order
-    const waLink = brand.phone
-        ? `https://wa.me/${brand.phone}?text=${encodeURIComponent(
-              `Halo, saya ingin menanyakan order ${order.orderNumber}.`
-          )}`
-        : null
+    const waLink = formatWaLink(
+        brand.phoneNormalized ?? brand.phone,
+        `Halo, saya ingin menanyakan order ${order.orderNumber}.`,
+    )
 
     return (
         <section className="surface p-5">

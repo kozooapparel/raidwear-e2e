@@ -94,7 +94,7 @@ export default function CustomerPicker({
         const qDigits = digitsOnly(q)
         const matches = customers.filter(c => {
             if (c.name.toLowerCase().includes(q)) return true
-            if (qDigits.length > 0 && digitsOnly(c.phone).includes(qDigits)) return true
+            if (qDigits.length > 0 && digitsOnly(c.phone_normalized ?? c.phone ?? '').includes(qDigits)) return true
             if ((c.kota ?? '').toLowerCase().includes(q)) return true
             if ((c.alamat ?? '').toLowerCase().includes(q)) return true
             return false
@@ -244,7 +244,7 @@ export default function CustomerPicker({
 
             {selected && !open && (
                 <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
-                    <span className="font-medium text-slate-600">{selected.phone}</span>
+                    <span className="font-medium text-slate-600">{selected.phone_normalized ? `+${selected.phone_normalized}` : (selected.phone || '-')}</span>
                     {selectedMeta && <span className="text-slate-400">· {selectedMeta}</span>}
                 </p>
             )}
@@ -289,7 +289,7 @@ export default function CustomerPicker({
                                                 {highlightMatch(customer.name, query)}
                                             </p>
                                             <p className="truncate text-xs text-slate-400">
-                                                {customer.phone}
+                                                {customer.phone_normalized ? `+${customer.phone_normalized}` : (customer.phone || '-')}
                                                 {customer.kota ? ` · ${customer.kota}` : ''}
                                             </p>
                                         </div>

@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Customer } from '@/types/database'
 import { toast } from 'sonner'
-import { Modal, ModalFooter } from '@/components/ui'
+import { Modal, ModalFooter, CountryCodePicker } from '@/components/ui'
+import { DEFAULT_COUNTRY_ISO, getDialByIso } from '@/lib/data/country-codes'
+import { normalizePhone, formatPhoneInput } from '@/lib/utils/phone'
 
 interface QuickCreateCustomerModalProps {
     isOpen: boolean
@@ -29,6 +31,7 @@ export default function QuickCreateCustomerModal({
 }: QuickCreateCustomerModalProps) {
     const [name, setName] = useState('')
     const [phone, setPhone] = useState('')
+    const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
     const [alamat, setAlamat] = useState('')
     const [saving, setSaving] = useState(false)
 
@@ -45,6 +48,8 @@ export default function QuickCreateCustomerModal({
     const handleSave = async () => {
         const namaCustomer = name.trim()
         const noHp = phone.trim()
+        const countryCode = getDialByIso(countryIso)
+        const normalized = normalizePhone(noHp, countryCode)
 
         if (!namaCustomer) {
             toast.warning('Nama customer harus diisi')
@@ -54,6 +59,10 @@ export default function QuickCreateCustomerModal({
             toast.warning('No. HP harus diisi')
             return
         }
+        if (!normalized) {
+            toast.warning('No. HP tidak valid. Periksa kembali format nomor')
+            return
+        }
 
         setSaving(true)
         try {
@@ -61,7 +70,7 @@ export default function QuickCreateCustomerModal({
             const { data: existing } = await supabase
                 .from('customers')
                 .select('*')
-                .eq('phone', noHp)
+                .eq('phone_normalized', normalized)
                 .maybeSingle()
 
             if (existing) {
@@ -76,6 +85,7 @@ export default function QuickCreateCustomerModal({
                 .insert({
                     name: namaCustomer,
                     phone: noHp,
+                    country_code: countryCode,
                     alamat: alamat.trim() || null,
                 })
                 .select('*')
@@ -128,13 +138,22 @@ export default function QuickCreateCustomerModal({
                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">
                         No. HP <span className="text-brand-600">*</span>
                     </label>
-                    <input
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="081234567890"
-                        className={inputClass}
-                    />
+                    <div className="flex gap-2">
+                        <div className="w-32 shrink-0">
+                            <CountryCodePicker
+                                value={countryIso}
+                                onChange={setCountryIso}
+                                ariaLabel="Pilih kode negara"
+                            />
+                        </div>
+                        <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(formatPhoneInput(e.target.value, getDialByIso(countryIso)))}
+                            placeholder="81234567890"
+                            className={`${inputClass} flex-1`}
+                        />
+                    </div>
                 </div>
 
                 <div>

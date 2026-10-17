@@ -136,7 +136,7 @@ export default function KanbanBoard({
             const matchesSearch = (
                 order.customer?.name.toLowerCase().includes(query) ||
                 order.order_description?.toLowerCase().includes(query) ||
-                order.customer?.phone.includes(query)
+                (order.customer?.phone_normalized || order.customer?.phone || '').includes(query)
             )
             if (!matchesSearch) return false
         }
