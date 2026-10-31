@@ -12,7 +12,7 @@ import { getOrderStageReadiness } from '@/lib/order-stage-readiness'
 import { copyTextToClipboard } from '@/lib/utils/clipboard'
 import { ImageDropzone, CurrencyInput, ConfirmDialog, validateImageFile } from '@/components/ui'
 import InvoicePreviewButton from '@/components/invoices/InvoicePreviewButton'
-import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder } from '@/lib/actions/orders'
+import { verifyDPPayment, correctDPPayment, moveOrderToNextStage, deleteOrder, updateDesignNotes, archiveOrder, completeOrder } from '@/lib/actions/orders'
 import { getCustomerPortalLink } from '@/lib/actions/customers'
 
 type OrderDetailTab = 'detail' | 'payment' | 'stage' | 'form-order'
@@ -107,6 +107,8 @@ export default function OrderDetailModal({
     const [savingNotes, setSavingNotes] = useState(false)
     const [archiving, setArchiving] = useState(false)
     const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
+    const [completing, setCompleting] = useState(false)
+    const [showCompleteConfirm, setShowCompleteConfirm] = useState(false)
     const [showDeleteMockupConfirm, setShowDeleteMockupConfirm] = useState(false)
     const [deletingMockup, setDeletingMockup] = useState(false)
     // Konfirmasi sebelum memundurkan order ke tahap sebelumnya
@@ -890,6 +892,30 @@ export default function OrderDetailModal({
         }
     }
 
+    // Handle complete order: mark payment as fully paid and archive it.
+    const handleCompleteOrder = async () => {
+        if (completing) return
+
+        setCompleting(true)
+        try {
+            const result = await completeOrder(order.id)
+            if (!result.success) {
+                toast.error(result.message)
+                return
+            }
+
+            toast.success(result.message)
+            setShowCompleteConfirm(false)
+            onOrderDeleted?.(order.id)
+            onClose()
+        } catch (err) {
+            console.error('Complete order error:', err)
+            toast.error('Gagal menyelesaikan order')
+        } finally {
+            setCompleting(false)
+        }
+    }
+
     // Handle archive order
     const handleArchiveOrder = async () => {
         setArchiving(true)
@@ -974,6 +1000,17 @@ export default function OrderDetailModal({
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                                 </svg>
                             )}
+                        </button>
+                        <button
+                            onClick={() => setShowCompleteConfirm(true)}
+                            className="flex h-[44px] w-[44px] items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 md:h-[36px] md:w-[36px]"
+                            title="Tandai order selesai"
+                            aria-label="Tandai order selesai"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <rect x="5" y="5" width="14" height="16" rx="2" strokeWidth={2} />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5V3h6v2M8 13l2.5 2.5L16 10" />
+                            </svg>
                         </button>
                         <button
                             onClick={() => setShowArchiveConfirm(true)}
@@ -2371,6 +2408,26 @@ export default function OrderDetailModal({
                 icon={
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                }
+            />
+
+            {/* Complete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showCompleteConfirm}
+                onClose={() => {
+                    if (!completing) setShowCompleteConfirm(false)
+                }}
+                onConfirm={handleCompleteOrder}
+                title="Tandai Order Selesai?"
+                description={`Order ${order.customer?.name ?? ''} akan dianggap sudah lunas dan dipindahkan ke arsip.`}
+                confirmText="Ya, Selesaikan"
+                tone="brand"
+                loading={completing}
+                icon={
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <rect x="5" y="5" width="14" height="16" rx="2" strokeWidth={2} />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5V3h6v2M8 13l2.5 2.5L16 10" />
                     </svg>
                 }
             />

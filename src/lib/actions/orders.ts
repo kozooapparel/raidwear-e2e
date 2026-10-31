@@ -552,6 +552,57 @@ export async function archiveOrder(orderId: string): Promise<{ success: boolean;
 }
 
 /**
+ * Mark an order as fully paid and archive it from every Kanban stage.
+ */
+export async function completeOrder(orderId: string): Promise<{ success: boolean; message: string }> {
+    const supabase = await createClient()
+
+    try {
+        const { data: order, error: orderError } = await supabase
+            .from('orders')
+            .select('id, is_archived')
+            .eq('id', orderId)
+            .single()
+
+        if (orderError || !order) {
+            throw new Error('Order tidak ditemukan')
+        }
+
+        if (order.is_archived) {
+            return { success: false, message: 'Order sudah diarsip' }
+        }
+
+        const now = new Date().toISOString()
+        const { error: updateError } = await supabase
+            .from('orders')
+            .update({
+                pelunasan_verified: true,
+                pelunasan_verified_at: now,
+                is_archived: true,
+                updated_at: now,
+            })
+            .eq('id', orderId)
+
+        if (updateError) throw updateError
+
+        revalidatePath('/')
+        revalidatePath('/dashboard')
+        revalidatePath('/orders/history')
+
+        return {
+            success: true,
+            message: 'Order ditandai selesai, pembayaran dianggap lunas, dan dipindahkan ke arsip.'
+        }
+    } catch (err) {
+        console.error('Complete order error:', err)
+        return {
+            success: false,
+            message: err instanceof Error ? err.message : 'Gagal menyelesaikan order'
+        }
+    }
+}
+
+/**
  * Unarchive an order (restore to Kanban)
  */
 export async function unarchiveOrder(orderId: string): Promise<{ success: boolean; message: string }> {
